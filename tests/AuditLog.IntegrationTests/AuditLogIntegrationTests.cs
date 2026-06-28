@@ -76,7 +76,7 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
             .ToListAsync();
 
         Assert.Single(logs);
-        Assert.Equal("Added", logs[0].Operacao);
+        Assert.Equal(AuditOperation.Added, logs[0].Operacao);
         Assert.Equal("integration-test-user", logs[0].UsuarioId);
         Assert.Equal("test-corr-001", logs[0].CorrelationId);
         Assert.Equal("***", logs[0].Cpf);
@@ -133,8 +133,8 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
             .ToListAsync();
 
         Assert.Equal(2, logs.Count);
-        Assert.Equal("Added", logs[0].Operacao);
-        Assert.Equal("Modified", logs[1].Operacao);
+        Assert.Equal(AuditOperation.Added, logs[0].Operacao);
+        Assert.Equal(AuditOperation.Modified, logs[1].Operacao);
         Assert.Contains("Nome", logs[1].CamposAlteradosJson ?? "");
     }
 
@@ -179,7 +179,7 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
 
         var addedLog = await db.Set<PacienteAuditLog>()
             .AsNoTracking()
-            .FirstAsync(x => x.PacienteId == paciente.Id && x.Operacao == "Added");
+            .FirstAsync(x => x.PacienteId == paciente.Id && x.Operacao == AuditOperation.Added);
 
         Assert.NotNull(addedLog.CamposAlteradosJson);
         Assert.Contains("*", addedLog.CamposAlteradosJson);
@@ -190,7 +190,7 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
 
         var modifiedLog = await db.Set<PacienteAuditLog>()
             .AsNoTracking()
-            .FirstAsync(x => x.PacienteId == paciente.Id && x.Operacao == "Modified");
+            .FirstAsync(x => x.PacienteId == paciente.Id && x.Operacao == AuditOperation.Modified);
 
         Assert.NotNull(modifiedLog.CamposAlteradosJson);
         Assert.Contains("Nome", modifiedLog.CamposAlteradosJson);
@@ -246,8 +246,8 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
             .ToListAsync();
 
         Assert.Equal(2, logs.Count);
-        Assert.Equal("Added", logs[0].Operacao);
-        Assert.Equal("Deleted", logs[1].Operacao);
+        Assert.Equal(AuditOperation.Added, logs[0].Operacao);
+        Assert.Equal(AuditOperation.Deleted, logs[1].Operacao);
     }
 }
 

@@ -23,7 +23,7 @@ internal static class CollectionEntityGenerator
         sb.AppendLine();
         sb.AppendLine($"        public global::System.Guid {col.ChildKey} {{ get; set; }}");
         sb.AppendLine();
-        sb.AppendLine("        public string Operacao { get; set; } = null!;");
+        sb.AppendLine("        public AuditLog.Abstractions.AuditOperation Operacao { get; set; }");
         sb.AppendLine();
         sb.AppendLine("        public global::System.DateTimeOffset OcorridoEm { get; set; }");
         sb.AppendLine();
@@ -64,9 +64,10 @@ internal static class CollectionEntityGenerator
         sb.AppendLine();
         sb.AppendLine("            builder.HasKey(x => x.Id);");
         sb.AppendLine();
-        sb.AppendLine("            builder.Property(x => x.Operacao)");
-        sb.AppendLine("                .HasMaxLength(30)");
-        sb.AppendLine("                .IsRequired();");
+            sb.AppendLine("            builder.Property(x => x.Operacao)");
+            sb.AppendLine("                .HasMaxLength(30)");
+            sb.AppendLine("                .IsRequired()");
+            sb.AppendLine("                .HasConversion<string>();");
         sb.AppendLine();
         sb.AppendLine("            builder.Property(x => x.UsuarioId)");
         sb.AppendLine("                .HasMaxLength(100);");
@@ -126,6 +127,14 @@ internal static class CollectionEntityGenerator
         sb.AppendLine();
         sb.AppendLine("            long? anteriorId = null;");
         sb.AppendLine();
+        sb.AppendLine("            var operacao = entry.State switch");
+        sb.AppendLine("            {");
+        sb.AppendLine("                EntityState.Added => AuditLog.Abstractions.AuditOperation.Added,");
+        sb.AppendLine("                EntityState.Modified => AuditLog.Abstractions.AuditOperation.Modified,");
+        sb.AppendLine("                EntityState.Deleted => AuditLog.Abstractions.AuditOperation.Deleted,");
+        sb.AppendLine("                _ => throw new InvalidOperationException($\"Unexpected entity state: {entry.State}\")");
+        sb.AppendLine("            };");
+        sb.AppendLine();
         sb.AppendLine("            if (entry.State != EntityState.Added)");
         sb.AppendLine("            {");
         sb.AppendLine($"                anteriorId = entry.Context.Set<{col.AuditLogName}>()");
@@ -139,7 +148,7 @@ internal static class CollectionEntityGenerator
         sb.AppendLine("            {");
         sb.AppendLine($"                {col.ParentKey} = entity.{col.ParentKey},");
         sb.AppendLine($"                {col.ChildKey} = entity.{col.ChildKey},");
-        sb.AppendLine("                Operacao = entry.State.ToString(),");
+        sb.AppendLine(                "                Operacao = operacao,");
         sb.AppendLine("                OcorridoEm = context.OcorridoEm,");
         sb.AppendLine("                UsuarioId = context.UsuarioId,");
         sb.AppendLine("                CorrelationId = context.CorrelationId,");

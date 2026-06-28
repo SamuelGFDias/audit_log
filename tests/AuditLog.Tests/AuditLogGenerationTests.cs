@@ -170,7 +170,7 @@ public sealed class AuditLogGenerationTests
 
         var logs = await db.Set<PacienteAuditLog>().ToListAsync();
         Assert.Single(logs);
-        Assert.Equal("Added", logs[0].Operacao);
+        Assert.Equal(AuditOperation.Added, logs[0].Operacao);
         Assert.Equal("user-123", logs[0].UsuarioId);
         Assert.Equal("corr-456", logs[0].CorrelationId);
         Assert.Equal("***", logs[0].Cpf);
@@ -228,7 +228,7 @@ public sealed class AuditLogGenerationTests
 
         // Situacao has AlwaysAudit. For Added, the check is "*" so we verify via Added
         var addedLog = await db.Set<NotificacaoAuditLog>()
-            .FirstAsync(x => x.NotificacaoId == notificacao.Id && x.Operacao == "Added");
+            .FirstAsync(x => x.NotificacaoId == notificacao.Id && x.Operacao == AuditOperation.Added);
         Assert.Contains("*", addedLog.CamposAlteradosJson!);
 
         // Now modify a non-AlwaysAudit field (Diagnostico) and verify Situacao appears
@@ -236,7 +236,7 @@ public sealed class AuditLogGenerationTests
         await db.SaveChangesAsync();
 
         var modifiedLog = await db.Set<NotificacaoAuditLog>()
-            .FirstAsync(x => x.NotificacaoId == notificacao.Id && x.Operacao == "Modified");
+            .FirstAsync(x => x.NotificacaoId == notificacao.Id && x.Operacao == AuditOperation.Modified);
         Assert.Contains("Situacao", modifiedLog.CamposAlteradosJson!);
         Assert.Contains("Diagnostico", modifiedLog.CamposAlteradosJson!);
     }
@@ -287,14 +287,86 @@ public sealed class AuditLogGenerationTests
 
         Assert.Equal(3, logs.Count);
 
-        Assert.Equal("Added", logs[0].Operacao);
+        Assert.Equal(AuditOperation.Added, logs[0].Operacao);
         Assert.Null(logs[0].AuditLogAnteriorId);
 
-        Assert.Equal("Modified", logs[1].Operacao);
+        Assert.Equal(AuditOperation.Modified, logs[1].Operacao);
         Assert.Equal(logs[0].Id, logs[1].AuditLogAnteriorId);
 
-        Assert.Equal("Modified", logs[2].Operacao);
+        Assert.Equal(AuditOperation.Modified, logs[2].Operacao);
         Assert.Equal(logs[1].Id, logs[2].AuditLogAnteriorId);
+    }
+
+    [Fact]
+    public async Task ForOwned_should_capture_before_and_after_values_on_update()
+    {
+        var registry = new AuditRegistry();
+        registry.AddGeneratedAuditConfigurations();
+
+        var options = new DbContextOptionsBuilder<TestDbContext>()
+            .UseInMemoryDatabase("ForOwnedDiff_" + Guid.NewGuid())
+            .AddInterceptors(new AuditSaveInterceptor(registry))
+            .Options;
+
+        using var db = new TestDbContext(options);
+
+        var paciente = new Paciente
+        {
+            Id = Guid.NewGuid(),
+            Nome = "Teste Endereço",
+            Cpf = "00000000000",
+            CartaoSus = "SUS000000",
+            DataNascimento = new DateOnly(2000, 1, 1),
+            DataAtualizacao = DateTime.UtcNow,
+            Endereco = new Endereco
+            {
+                Logradouro = "Rua Antiga, 123",
+                Cidade = "São Paulo",
+                Cep = "01001000"
+            }
+        };
+
+        db.Set<Paciente>().Add(paciente);
+        await db.SaveChangesAsync();
+
+        // Modificar propriedades do owned type diretamente
+        paciente.Nome = "Nome alterado";
+        paciente.Endereco.Logradouro = "Rua Nova, 456";
+        paciente.Endereco.Cep = "02002000";
+        await db.SaveChangesAsync();
+
+        var allLogs = await db.Set<PacienteAuditLog>()
+            .AsNoTracking()
+            .Where(x => x.PacienteId == paciente.Id)
+            .OrderBy(x => x.OcorridoEm)
+            .ToListAsync();
+
+        // Deve ter 2 logs: Added + Modified
+        Assert.Equal(2, allLogs.Count);
+        Assert.Equal(AuditOperation.Added, allLogs[0].Operacao);
+
+        var modifiedLog = allLogs.FirstOrDefault(x => x.Operacao == AuditOperation.Modified);
+
+        Assert.NotNull(modifiedLog);
+        Assert.NotNull(modifiedLog.AuditLogAnteriorId);
+
+        var anteriorLog = await db.Set<PacienteAuditLog>()
+            .AsNoTracking()
+            .FirstAsync(x => x.Id == modifiedLog.AuditLogAnteriorId);
+
+        // Valores NOVOS no log atual
+        Assert.Equal("Rua Nova, 456", modifiedLog.EnderecoLogradouro);
+        Assert.Equal("São Paulo", modifiedLog.EnderecoCidade);
+        Assert.Equal("***", modifiedLog.EnderecoCep);
+
+        // Valores ANTIGOS no log anterior (consulta direta por AuditLogAnteriorId)
+        Assert.Equal("Rua Antiga, 123", anteriorLog.EnderecoLogradouro);
+        Assert.Equal("São Paulo", anteriorLog.EnderecoCidade);
+        Assert.Equal("***", anteriorLog.EnderecoCep);
+
+        // CamposAlteradosJson deve incluir endereço
+        Assert.Contains("Endereco.Logradouro", modifiedLog.CamposAlteradosJson);
+        Assert.Contains("Endereco.Cep", modifiedLog.CamposAlteradosJson);
     }
 }
 
