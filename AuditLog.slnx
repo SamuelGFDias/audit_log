@@ -4,4 +4,6 @@
   <Project Path="src/AuditLog.EntityFrameworkCore/AuditLog.EntityFrameworkCore.csproj" />
   <Project Path="tests/AuditLog.Tests/AuditLog.Tests.csproj" />
   <Project Path="tests/AuditLog.IntegrationTests/AuditLog.IntegrationTests.csproj" />
+  <Project Path="src/AuditLog.EntityFrameworkCore.SoftDelete/AuditLog.EntityFrameworkCore.SoftDelete.csproj" />
+  <Project Path="tests/AuditLog.SoftDelete.IntegrationTests/AuditLog.SoftDelete.IntegrationTests.csproj" />
 </Solution>
