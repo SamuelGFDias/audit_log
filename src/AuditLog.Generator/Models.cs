@@ -6,6 +6,8 @@ namespace AuditLog.Generator;
 internal sealed class PropertyConfig
 {
     public string PropertyName { get; }
+    public string? NavigationPrefix { get; }
+    public string FullPropertyName => NavigationPrefix is null ? PropertyName : NavigationPrefix + PropertyName;
     public bool IsKey { get; }
     public bool IsIgnored { get; }
     public bool IsSensitive { get; }
@@ -15,10 +17,11 @@ internal sealed class PropertyConfig
     public bool IsRequired { get; }
 
     public PropertyConfig(
-        string propertyName, bool isKey, bool isIgnored, bool isSensitive,
+        string propertyName, string? navigationPrefix, bool isKey, bool isIgnored, bool isSensitive,
         bool alwaysAudit, string? columnName, int maxLength, bool isRequired)
     {
         PropertyName = propertyName;
+        NavigationPrefix = navigationPrefix;
         IsKey = isKey;
         IsIgnored = isIgnored;
         IsSensitive = isSensitive;

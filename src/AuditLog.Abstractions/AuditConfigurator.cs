@@ -18,6 +18,13 @@ public abstract class AuditConfigurator<TEntity>
         return default!;
     }
 
+    protected void ForOwned<TOwned>(
+        Expression<Func<TEntity, TOwned>> expression,
+        Action<AuditOwnedBuilder<TEntity, TOwned>> configure)
+        where TOwned : class
+    {
+    }
+
     protected AuditCollectionBuilder<TEntity, TElement> ForEach<TElement>(
         Expression<Func<TEntity, IEnumerable<TElement>>> expression)
         where TElement : class

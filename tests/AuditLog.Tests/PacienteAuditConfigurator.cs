@@ -24,5 +24,12 @@ public sealed partial class PacienteAuditConfigurator
 
         For(x => x.DataAtualizacao)
             .Ignore();
+
+        ForOwned(x => x.Endereco, o =>
+        {
+            o.For(x => x.Logradouro).HasMaxLength(200).IsRequired();
+            o.For(x => x.Cidade);
+            o.For(x => x.Cep).Sensitive().HasMaxLength(8);
+        });
     }
 }

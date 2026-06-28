@@ -6,6 +6,14 @@ public sealed class Paciente
     public string CartaoSus { get; set; } = null!;
     public DateOnly DataNascimento { get; set; }
     public DateTime DataAtualizacao { get; set; }
+    public Endereco Endereco { get; set; } = null!;
+}
+
+public sealed class Endereco
+{
+    public string Logradouro { get; set; } = null!;
+    public string Cidade { get; set; } = null!;
+    public string Cep { get; set; } = null!;
 }
 
 public sealed class Notificacao

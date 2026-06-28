@@ -57,7 +57,13 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
             Cpf = "98765432100",
             CartaoSus = "SUS987654",
             DataNascimento = new DateOnly(1985, 5, 20),
-            DataAtualizacao = DateTime.UtcNow
+            DataAtualizacao = DateTime.UtcNow,
+            Endereco = new Endereco
+            {
+                Logradouro = "Rua Teste",
+                Cidade = "Cidade Teste",
+                Cep = "00000000"
+            }
         };
 
         db.Set<Paciente>().Add(paciente);
@@ -105,7 +111,13 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
             Cpf = "11122233344",
             CartaoSus = "SUS111222",
             DataNascimento = new DateOnly(1990, 1, 15),
-            DataAtualizacao = DateTime.UtcNow
+            DataAtualizacao = DateTime.UtcNow,
+            Endereco = new Endereco
+            {
+                Logradouro = "Rua Original",
+                Cidade = "Cidade Original",
+                Cep = "11111111"
+            }
         };
 
         db.Set<Paciente>().Add(paciente);
@@ -153,7 +165,13 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
             Cpf = "00000000000",
             CartaoSus = "SUS000000",
             DataNascimento = new DateOnly(2000, 1, 1),
-            DataAtualizacao = DateTime.UtcNow
+            DataAtualizacao = DateTime.UtcNow,
+            Endereco = new Endereco
+            {
+                Logradouro = "Rua Teste",
+                Cidade = "Cidade Teste",
+                Cep = "00000000"
+            }
         };
 
         db.Set<Paciente>().Add(paciente);
@@ -206,7 +224,13 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
             Cpf = "99988877766",
             CartaoSus = "SUS999888",
             DataNascimento = new DateOnly(1995, 3, 10),
-            DataAtualizacao = DateTime.UtcNow
+            DataAtualizacao = DateTime.UtcNow,
+            Endereco = new Endereco
+            {
+                Logradouro = "Rua Delete",
+                Cidade = "Cidade Delete",
+                Cep = "99999999"
+            }
         };
 
         db.Set<Paciente>().Add(paciente);
@@ -237,6 +261,12 @@ public sealed class TestDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.Entity<Paciente>().ToTable("Pacientes").HasKey(x => x.Id);
+        modelBuilder.Entity<Paciente>().OwnsOne(x => x.Endereco, end =>
+        {
+            end.Property(e => e.Logradouro).HasMaxLength(200).IsRequired();
+            end.Property(e => e.Cidade);
+            end.Property(e => e.Cep).HasMaxLength(8);
+        });
         modelBuilder.ApplyGeneratedAuditMaps();
     }
 }

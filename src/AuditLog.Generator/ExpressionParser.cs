@@ -25,6 +25,8 @@ internal static class ExpressionParser
             ParseForChain(innermost, expression, entityProperties);
         else if (methodName == "ForEach")
             ParseForEachChain(innermost, expression, entityType, entityName, collectionConfigs);
+        else if (methodName == "ForOwned")
+            ParseForOwnedChain(innermost, expression, entityType, entityProperties);
     }
 
     private static InvocationExpressionSyntax? FindInnermostInvocation(ExpressionSyntax expression)
@@ -60,7 +62,7 @@ internal static class ExpressionParser
             ref alwaysAudit, ref columnName, ref maxLength, ref isRequired);
 
         configs.Add(new PropertyConfig(
-            propertyName, isKey, isIgnored, isSensitive,
+            propertyName, null, isKey, isIgnored, isSensitive,
             alwaysAudit, columnName, maxLength, isRequired));
     }
 
@@ -119,6 +121,67 @@ internal static class ExpressionParser
             itemConfigs.ToImmutableArray()));
     }
 
+    private static void ParseForOwnedChain(
+        InvocationExpressionSyntax forOwnedCall,
+        ExpressionSyntax fullExpression,
+        ITypeSymbol entityType,
+        List<PropertyConfig> configs)
+    {
+        if (forOwnedCall.ArgumentList.Arguments.Count < 2)
+            return;
+
+        var navArg = forOwnedCall.ArgumentList.Arguments[0].Expression;
+        var configArg = forOwnedCall.ArgumentList.Arguments[1].Expression;
+
+        ExpressionSyntax? navBody = null;
+        if (navArg is SimpleLambdaExpressionSyntax sl)
+            navBody = sl.Body as ExpressionSyntax;
+        else if (navArg is ParenthesizedLambdaExpressionSyntax pl)
+            navBody = pl.Body as ExpressionSyntax;
+
+        if (navBody is not MemberAccessExpressionSyntax navMa)
+            return;
+
+        var navigation = navMa.Name.Identifier.Text;
+
+        if (configArg is not LambdaExpressionSyntax configLambda)
+            return;
+
+        if (configLambda.Body is not BlockSyntax block)
+            return;
+
+        foreach (var stmt in block.Statements)
+        {
+            if (stmt is not ExpressionStatementSyntax exprStmt)
+                continue;
+
+            var innermost = FindInnermostInvocation(exprStmt.Expression);
+            if (innermost is null) continue;
+
+            var methodName = GetMethodName(innermost);
+            if (methodName != "For")
+                continue;
+
+            var propertyName = ExtractPropertyName(innermost);
+            if (propertyName is null) continue;
+
+            var isKey = false;
+            var isIgnored = false;
+            var isSensitive = false;
+            var alwaysAudit = false;
+            string? columnName = null;
+            var maxLength = 0;
+            var isRequired = false;
+
+            CollectModifiers(exprStmt.Expression, ref isKey, ref isIgnored, ref isSensitive,
+                ref alwaysAudit, ref columnName, ref maxLength, ref isRequired);
+
+            configs.Add(new PropertyConfig(
+                propertyName, navigation, isKey, isIgnored, isSensitive,
+                alwaysAudit, columnName, maxLength, isRequired));
+        }
+    }
+
     private static void CollectForEachModifiers(
         ExpressionSyntax expression,
         ref string? parentKey, ref string? childKey,
@@ -161,7 +224,7 @@ internal static class ExpressionParser
                     var propertyName = ExtractPropertyName(invocation);
                     if (propertyName is not null)
                         configs.Add(new PropertyConfig(
-                            propertyName, false, false, false, false, null, 0, false));
+                            propertyName, null, false, false, false, false, null, 0, false));
                 }
             }
         }

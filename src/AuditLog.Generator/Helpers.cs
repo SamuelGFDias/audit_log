@@ -20,7 +20,7 @@ internal static class Helpers
         {
             if (prop.IsIgnored || prop.IsKey) continue;
             var nullable = prop.IsRequired ? "" : "?";
-            sb.AppendLine($"        public string{nullable} {prop.PropertyName} {{ get; set; }}");
+            sb.AppendLine($"        public string{nullable} {prop.FullPropertyName} {{ get; set; }}");
             sb.AppendLine();
         }
     }
@@ -30,7 +30,7 @@ internal static class Helpers
         foreach (var prop in properties)
         {
             if (prop.PropertyName == parentKey || prop.PropertyName == childKey) continue;
-            sb.AppendLine($"        public string? {prop.PropertyName} {{ get; set; }}");
+            sb.AppendLine($"        public string? {prop.FullPropertyName} {{ get; set; }}");
             sb.AppendLine();
         }
     }
@@ -46,7 +46,7 @@ internal static class Helpers
         {
             if (prop.IsIgnored || prop.IsKey) continue;
             if (prop.PropertyName == exclude1 || prop.PropertyName == exclude2) continue;
-            sb.AppendLine($"            builder.Property(x => x.{prop.PropertyName})");
+            sb.AppendLine($"            builder.Property(x => x.{prop.FullPropertyName})");
 
             if (prop.MaxLength > 0)
                 sb.AppendLine($"                .HasMaxLength({prop.MaxLength})");
@@ -73,10 +73,15 @@ internal static class Helpers
         {
             if (prop.IsIgnored || prop.IsKey) continue;
             if (prop.PropertyName == exclude1 || prop.PropertyName == exclude2) continue;
+
+            var valueExpr = prop.NavigationPrefix is null
+                ? $"entity.{prop.PropertyName}"
+                : $"entity.{prop.NavigationPrefix}.{prop.PropertyName}";
+
             if (prop.IsSensitive)
-                sb.AppendLine($"{indent}{prop.PropertyName} = \"***\",");
+                sb.AppendLine($"{indent}{prop.FullPropertyName} = \"***\",");
             else
-                sb.AppendLine($"{indent}{prop.PropertyName} = entity.{prop.PropertyName}!.ToString()!,");
+                sb.AppendLine($"{indent}{prop.FullPropertyName} = global::System.Convert.ToString({valueExpr}),");
         }
     }
 
@@ -91,8 +96,32 @@ internal static class Helpers
         {
             if (prop.IsIgnored || prop.IsKey) continue;
             if (prop.PropertyName == exclude1 || prop.PropertyName == exclude2) continue;
-            sb.AppendLine($"            if (entry.Property(x => x.{prop.PropertyName}).IsModified)");
-            sb.AppendLine($"                changed.Add(nameof({entityName}.{prop.PropertyName}));");
+
+            var propertyExpr = prop.NavigationPrefix is null
+                ? $"x => x.{prop.PropertyName}"
+                : $"\"{prop.NavigationPrefix}_{prop.PropertyName}\"";
+
+            var changedName = prop.NavigationPrefix is null
+                ? $"nameof({entityName}.{prop.PropertyName})"
+                : $"\"{prop.NavigationPrefix}.{prop.PropertyName}\"";
+
+            if (prop.AlwaysAudit)
+            {
+                sb.AppendLine($"            changed.Add({changedName});");
+                sb.AppendLine();
+                continue;
+            }
+
+            if (prop.NavigationPrefix is not null)
+            {
+                sb.AppendLine($"            if (entry.Reference(x => x.{prop.NavigationPrefix}).TargetEntry?.Property(x => x.{prop.PropertyName}).IsModified == true)");
+                sb.AppendLine($"                changed.Add({changedName});");
+            }
+            else
+            {
+                sb.AppendLine($"            if (entry.Property({propertyExpr}).IsModified)");
+                sb.AppendLine($"                changed.Add({changedName});");
+            }
         }
     }
 }
