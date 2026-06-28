@@ -1,0 +1,233 @@
+#nullable enable
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
+
+namespace AuditLog.Generator;
+
+internal static class ExpressionParser
+{
+    public static void ParseStatementExpression(
+        ExpressionSyntax expression,
+        List<PropertyConfig> entityProperties,
+        List<CollectionConfig> collectionConfigs,
+        ITypeSymbol entityType,
+        string entityName)
+    {
+        var innermost = FindInnermostInvocation(expression);
+        if (innermost is null) return;
+
+        var methodName = GetMethodName(innermost);
+        if (methodName == "For")
+            ParseForChain(innermost, expression, entityProperties);
+        else if (methodName == "ForEach")
+            ParseForEachChain(innermost, expression, entityType, entityName, collectionConfigs);
+    }
+
+    private static InvocationExpressionSyntax? FindInnermostInvocation(ExpressionSyntax expression)
+    {
+        while (expression is InvocationExpressionSyntax inv)
+        {
+            if (inv.Expression is MemberAccessExpressionSyntax ma &&
+                ma.Expression is InvocationExpressionSyntax inner)
+                expression = inner;
+            else
+                return inv;
+        }
+        return null;
+    }
+
+    private static void ParseForChain(
+        InvocationExpressionSyntax forCall,
+        ExpressionSyntax fullExpression,
+        List<PropertyConfig> configs)
+    {
+        var propertyName = ExtractPropertyName(forCall);
+        if (propertyName is null) return;
+
+        var isKey = false;
+        var isIgnored = false;
+        var isSensitive = false;
+        var alwaysAudit = false;
+        string? columnName = null;
+        var maxLength = 0;
+        var isRequired = false;
+
+        CollectModifiers(fullExpression, ref isKey, ref isIgnored, ref isSensitive,
+            ref alwaysAudit, ref columnName, ref maxLength, ref isRequired);
+
+        configs.Add(new PropertyConfig(
+            propertyName, isKey, isIgnored, isSensitive,
+            alwaysAudit, columnName, maxLength, isRequired));
+    }
+
+    private static void CollectModifiers(
+        ExpressionSyntax expression,
+        ref bool isKey, ref bool isIgnored, ref bool isSensitive, ref bool alwaysAudit,
+        ref string? columnName, ref int maxLength, ref bool isRequired)
+    {
+        if (expression is not InvocationExpressionSyntax invocation) return;
+
+        switch (GetMethodName(invocation))
+        {
+            case "Key": isKey = true; break;
+            case "Ignore": isIgnored = true; break;
+            case "Sensitive": isSensitive = true; break;
+            case "AlwaysAudit": alwaysAudit = true; break;
+            case "WithColumnName":
+                if (GetFirstArg(invocation) is LiteralExpressionSyntax lit)
+                    columnName = lit.Token.ValueText;
+                break;
+            case "HasMaxLength":
+                if (GetFirstArg(invocation) is LiteralExpressionSyntax num && num.IsKind(SyntaxKind.NumericLiteralExpression))
+                    maxLength = (int)num.Token.Value!;
+                break;
+            case "IsRequired": isRequired = true; break;
+        }
+
+        if (invocation.Expression is MemberAccessExpressionSyntax ma &&
+            ma.Expression is ExpressionSyntax inner)
+            CollectModifiers(inner, ref isKey, ref isIgnored, ref isSensitive,
+                ref alwaysAudit, ref columnName, ref maxLength, ref isRequired);
+    }
+
+    private static void ParseForEachChain(
+        InvocationExpressionSyntax forEachCall,
+        ExpressionSyntax fullExpression,
+        ITypeSymbol entityType,
+        string entityName,
+        List<CollectionConfig> configs)
+    {
+        var propertyName = ExtractPropertyName(forEachCall);
+        if (propertyName is null) return;
+
+        var elementName = ResolveCollectionElementType(entityType, propertyName);
+        var auditLogName = elementName + "AuditLog";
+        string? parentKey = null;
+        string? childKey = null;
+        var itemConfigs = new List<PropertyConfig>();
+
+        CollectForEachModifiers(fullExpression, ref parentKey, ref childKey, itemConfigs);
+
+        configs.Add(new CollectionConfig(
+            elementName, auditLogName,
+            parentKey ?? elementName + "Id",
+            childKey ?? "Id",
+            itemConfigs.ToImmutableArray()));
+    }
+
+    private static void CollectForEachModifiers(
+        ExpressionSyntax expression,
+        ref string? parentKey, ref string? childKey,
+        List<PropertyConfig> itemConfigs)
+    {
+        if (expression is not InvocationExpressionSyntax invocation) return;
+
+        var methodName = GetMethodName(invocation);
+        var arg = GetFirstArg(invocation);
+
+        switch (methodName)
+        {
+            case "ParentKey" when arg is LambdaExpressionSyntax pl:
+                parentKey = ExtractPropertyFromLambda(pl); break;
+            case "Key" when arg is LambdaExpressionSyntax kl:
+                childKey = ExtractPropertyFromLambda(kl); break;
+            case "Configure" when arg is LambdaExpressionSyntax cl:
+                ParseConfigureLambda(cl, itemConfigs); break;
+        }
+
+        if (invocation.Expression is MemberAccessExpressionSyntax ma &&
+            ma.Expression is ExpressionSyntax inner)
+            CollectForEachModifiers(inner, ref parentKey, ref childKey, itemConfigs);
+    }
+
+    public static void ParseConfigureLambda(
+        LambdaExpressionSyntax lambda,
+        List<PropertyConfig> configs)
+    {
+        if (lambda.Body is not BlockSyntax block) return;
+
+        foreach (var stmt in block.Statements)
+        {
+            if (stmt is ExpressionStatementSyntax exprStmt &&
+                exprStmt.Expression is InvocationExpressionSyntax invocation)
+            {
+                var methodName = GetMethodName(invocation);
+                if (methodName == "For")
+                {
+                    var propertyName = ExtractPropertyName(invocation);
+                    if (propertyName is not null)
+                        configs.Add(new PropertyConfig(
+                            propertyName, false, false, false, false, null, 0, false));
+                }
+            }
+        }
+    }
+
+    public static string? GetMethodName(InvocationExpressionSyntax invocation)
+    {
+        return invocation.Expression switch
+        {
+            MemberAccessExpressionSyntax ma => ma.Name.Identifier.Text,
+            IdentifierNameSyntax ins => ins.Identifier.Text,
+            GenericNameSyntax gns => gns.Identifier.Text,
+            _ => null
+        };
+    }
+
+    public static ExpressionSyntax? GetFirstArg(InvocationExpressionSyntax invocation)
+    {
+        return invocation.ArgumentList.Arguments.Count > 0
+            ? invocation.ArgumentList.Arguments[0].Expression
+            : null;
+    }
+
+    public static string? ExtractPropertyName(InvocationExpressionSyntax invocation)
+    {
+        var arg = GetFirstArg(invocation);
+        if (arg is null) return null;
+
+        ExpressionSyntax? body = null;
+        if (arg is SimpleLambdaExpressionSyntax sl)
+            body = sl.Body as ExpressionSyntax;
+        else if (arg is ParenthesizedLambdaExpressionSyntax pl)
+            body = pl.Body as ExpressionSyntax;
+
+        if (body is MemberAccessExpressionSyntax ma)
+            return ma.Name.Identifier.Text;
+
+        return null;
+    }
+
+    private static string? ExtractPropertyFromLambda(LambdaExpressionSyntax lambda)
+    {
+        if (lambda.Body is MemberAccessExpressionSyntax ma)
+            return ma.Name.Identifier.Text;
+        return null;
+    }
+
+    private static string ResolveCollectionElementType(ITypeSymbol entityType, string propertyName)
+    {
+        foreach (var member in entityType.GetMembers())
+        {
+            if (member.Name != propertyName) continue;
+
+            INamedTypeSymbol? named = member switch
+            {
+                IPropertySymbol p => p.Type as INamedTypeSymbol,
+                IFieldSymbol f => f.Type as INamedTypeSymbol,
+                _ => null
+            };
+
+            if (named is not null && named.IsGenericType && named.TypeArguments.Length > 0)
+                return named.TypeArguments[0].Name;
+
+            return propertyName;
+        }
+
+        return propertyName;
+    }
+}

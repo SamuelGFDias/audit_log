@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="src/AuditLog.Abstractions/AuditLog.Abstractions.csproj" />
+  <Project Path="src/AuditLog.Generator/AuditLog.Generator.csproj" />
+  <Project Path="src/AuditLog.EntityFrameworkCore/AuditLog.EntityFrameworkCore.csproj" />
+  <Project Path="tests/AuditLog.Tests/AuditLog.Tests.csproj" />
+  <Project Path="tests/AuditLog.IntegrationTests/AuditLog.IntegrationTests.csproj" />
+</Solution>
