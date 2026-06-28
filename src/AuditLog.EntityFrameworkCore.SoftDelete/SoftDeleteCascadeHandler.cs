@@ -29,17 +29,17 @@ public static class SoftDeleteCascadeHandler
         {
             switch (fk.DeleteBehavior)
             {
-                case DeleteBehavior.Restrict:
-                case DeleteBehavior.NoAction:
+                case Microsoft.EntityFrameworkCore.DeleteBehavior.Restrict:
+                case Microsoft.EntityFrameworkCore.DeleteBehavior.NoAction:
                     await ValidateRestrictAsync(context, entry, fk);
                     break;
 
-                case DeleteBehavior.Cascade:
+                case Microsoft.EntityFrameworkCore.DeleteBehavior.Cascade:
                     await ProcessCascadeAsync(context, entry, deletedAt, fk, visited);
                     break;
 
-                case DeleteBehavior.SetNull:
-                case DeleteBehavior.ClientSetNull:
+                case Microsoft.EntityFrameworkCore.DeleteBehavior.SetNull:
+                case Microsoft.EntityFrameworkCore.DeleteBehavior.ClientSetNull:
                     await ProcessSetNullAsync(context, entry, fk);
                     break;
             }
