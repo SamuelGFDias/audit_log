@@ -32,7 +32,7 @@ public sealed class SoftDeleteReflectionTests : IAsyncLifetime
     [Fact]
     public async Task Should_mark_IsDeleted_and_DeletedAt_on_soft_delete()
     {
-        using var db = CreateDb(nameof(Should_mark_IsDeleted_and_DeletedAt_on_soft_delete));
+        await using var db = CreateDb(nameof(Should_mark_IsDeleted_and_DeletedAt_on_soft_delete));
         var paciente = new Paciente { Id = Guid.NewGuid(), Nome = "João Silva", Endereco = new PacienteEndereco { Logradouro = "Rua A", Cidade = "Cidade B" } };
         db.Set<Paciente>().Add(paciente); await db.SaveChangesAsync();
         db.Set<Paciente>().Remove(paciente); await db.SaveChangesAsync();
@@ -43,7 +43,7 @@ public sealed class SoftDeleteReflectionTests : IAsyncLifetime
     [Fact]
     public async Task Should_cascade_soft_delete_to_children()
     {
-        using var db = CreateDb(nameof(Should_cascade_soft_delete_to_children));
+        await using var db = CreateDb(nameof(Should_cascade_soft_delete_to_children));
         var pacienteId = Guid.NewGuid();
         var paciente = new Paciente { Id = pacienteId, Nome = "Maria", Endereco = new PacienteEndereco { Logradouro = "Rua", Cidade = "Cid" } };
         var notif = new Notificacao { Id = Guid.NewGuid(), Diagnostico = "D", PacienteId = pacienteId, Paciente = paciente };
@@ -57,7 +57,7 @@ public sealed class SoftDeleteReflectionTests : IAsyncLifetime
     [Fact]
     public async Task Should_throw_RestrictDeleteViolationException_when_dependents_exist()
     {
-        using var db = CreateDb(nameof(Should_throw_RestrictDeleteViolationException_when_dependents_exist));
+        await using var db = CreateDb(nameof(Should_throw_RestrictDeleteViolationException_when_dependents_exist));
         var pacienteId = Guid.NewGuid();
         var paciente = new Paciente { Id = pacienteId, Nome = "R", Endereco = new PacienteEndereco { Logradouro = "R", Cidade = "C" } };
         paciente.Documentos.Add(new PacienteDocumento { Id = Guid.NewGuid(), NomeDocumento = "D", PacienteId = pacienteId });
@@ -87,7 +87,7 @@ public sealed class SoftDeleteReflectionTests : IAsyncLifetime
     [Fact]
     public async Task Should_filter_out_soft_deleted_entities_by_default()
     {
-        using var db = CreateDb(nameof(Should_filter_out_soft_deleted_entities_by_default));
+        await using var db = CreateDb(nameof(Should_filter_out_soft_deleted_entities_by_default));
         var p1 = new Paciente { Id = Guid.NewGuid(), Nome = "Ativo", Endereco = new PacienteEndereco { Logradouro = "R", Cidade = "C" } };
         var p2 = new Paciente { Id = Guid.NewGuid(), Nome = "Del", Endereco = new PacienteEndereco { Logradouro = "R2", Cidade = "C2" } };
         db.Set<Paciente>().AddRange(p1, p2); await db.SaveChangesAsync();
@@ -98,7 +98,7 @@ public sealed class SoftDeleteReflectionTests : IAsyncLifetime
     [Fact]
     public async Task Should_return_all_entities_with_IgnoreQueryFilters()
     {
-        using var db = CreateDb(nameof(Should_return_all_entities_with_IgnoreQueryFilters));
+        await using var db = CreateDb(nameof(Should_return_all_entities_with_IgnoreQueryFilters));
         var p1 = new Paciente { Id = Guid.NewGuid(), Nome = "A", Endereco = new PacienteEndereco { Logradouro = "R", Cidade = "C" } };
         var p2 = new Paciente { Id = Guid.NewGuid(), Nome = "D", Endereco = new PacienteEndereco { Logradouro = "R2", Cidade = "C2" } };
         db.Set<Paciente>().AddRange(p1, p2); await db.SaveChangesAsync();
@@ -109,7 +109,7 @@ public sealed class SoftDeleteReflectionTests : IAsyncLifetime
     [Fact]
     public async Task Should_not_throw_when_deleting_entity_without_dependents_Restrict()
     {
-        using var db = CreateDb(nameof(Should_not_throw_when_deleting_entity_without_dependents_Restrict));
+        await using var db = CreateDb(nameof(Should_not_throw_when_deleting_entity_without_dependents_Restrict));
         var p = new Paciente { Id = Guid.NewGuid(), Nome = "SD", Endereco = new PacienteEndereco { Logradouro = "R", Cidade = "C" } };
         db.Set<Paciente>().Add(p); await db.SaveChangesAsync();
         db.Set<Paciente>().Remove(p); await db.SaveChangesAsync();
@@ -119,7 +119,7 @@ public sealed class SoftDeleteReflectionTests : IAsyncLifetime
     [Fact]
     public async Task Should_convert_physical_delete_to_soft_delete_for_ISoftDeleteEntity()
     {
-        using var db = CreateDb(nameof(Should_convert_physical_delete_to_soft_delete_for_ISoftDeleteEntity));
+        await using var db = CreateDb(nameof(Should_convert_physical_delete_to_soft_delete_for_ISoftDeleteEntity));
         var p = new Paciente { Id = Guid.NewGuid(), Nome = "F", Endereco = new PacienteEndereco { Logradouro = "R", Cidade = "C" } };
         db.Set<Paciente>().Add(p); await db.SaveChangesAsync();
         db.Set<Paciente>().Remove(p); await db.SaveChangesAsync();

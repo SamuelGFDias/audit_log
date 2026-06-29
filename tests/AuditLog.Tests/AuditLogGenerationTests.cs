@@ -147,7 +147,7 @@ public sealed class AuditLogGenerationTests
                     CorrelationId: "corr-456")))
             .Options;
 
-        using var db = new TestDbContext(options);
+        await using var db = new TestDbContext(options);
 
         var paciente = new Paciente
         {
@@ -191,7 +191,7 @@ public sealed class AuditLogGenerationTests
             .AddInterceptors(new AuditSaveInterceptor(registry))
             .Options;
 
-        using var db = new TestDbContext(options);
+        await using var db = new TestDbContext(options);
 
         Assert.NotNull(db.Model.FindEntityType(typeof(PacienteAuditLog)));
         Assert.NotNull(db.Model.FindEntityType(typeof(NotificacaoAuditLog)));
@@ -209,7 +209,7 @@ public sealed class AuditLogGenerationTests
             .AddInterceptors(new AuditSaveInterceptor(registry))
             .Options;
 
-        using var db = new TestDbContext(options);
+        await using var db = new TestDbContext(options);
 
         var notificacao = new Notificacao
         {
@@ -252,7 +252,7 @@ public sealed class AuditLogGenerationTests
             .AddInterceptors(new AuditSaveInterceptor(registry))
             .Options;
 
-        using var db = new TestDbContext(options);
+        await using var db = new TestDbContext(options);
 
         var paciente = new Paciente
         {
@@ -308,7 +308,7 @@ public sealed class AuditLogGenerationTests
             .AddInterceptors(new AuditSaveInterceptor(registry))
             .Options;
 
-        using var db = new TestDbContext(options);
+        await using var db = new TestDbContext(options);
 
         var paciente = new Paciente
         {

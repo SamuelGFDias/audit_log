@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\AuditLog.Abstractions\AuditLog.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\AuditLog.EntityFrameworkCore\AuditLog.EntityFrameworkCore.csproj" />
+
   </ItemGroup>
 
   <ItemGroup>

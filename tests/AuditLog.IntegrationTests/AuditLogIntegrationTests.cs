@@ -47,7 +47,7 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
             .AddInterceptors(interceptor)
             .Options;
 
-        using var db = new TestDbContext(options);
+        await using var db = new TestDbContext(options);
         await db.Database.EnsureCreatedAsync();
 
         var paciente = new Paciente
@@ -101,7 +101,7 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
             .AddInterceptors(interceptor)
             .Options;
 
-        using var db = new TestDbContext(options);
+        await using var db = new TestDbContext(options);
         await db.Database.EnsureCreatedAsync();
 
         var paciente = new Paciente
@@ -155,7 +155,7 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
             .AddInterceptors(interceptor)
             .Options;
 
-        using var db = new TestDbContext(options);
+        await using var db = new TestDbContext(options);
         await db.Database.EnsureCreatedAsync();
 
         var paciente = new Paciente
@@ -214,7 +214,7 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
             .AddInterceptors(interceptor)
             .Options;
 
-        using var db = new TestDbContext(options);
+        await using var db = new TestDbContext(options);
         await db.Database.EnsureCreatedAsync();
 
         var paciente = new Paciente
@@ -251,12 +251,8 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
     }
 }
 
-public sealed class TestDbContext : DbContext
+public sealed class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(options)
 {
-    public TestDbContext(DbContextOptions<TestDbContext> options) : base(options)
-    {
-    }
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
