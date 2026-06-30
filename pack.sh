@@ -17,27 +17,26 @@ dotnet build "$ROOT_DIR/AuditLog.slnx" \
   --configuration "$CONFIGURATION" \
   --no-restore
 
-echo "==> Packing core projects..."
-CORE_PROJECTS=(
-  "src/AuditLog.Abstractions/AuditLog.Abstractions.csproj"
-  "src/AuditLog.EntityFrameworkCore/AuditLog.EntityFrameworkCore.csproj"
-  "src/AuditLog.Generator/AuditLog.Generator.csproj"
-)
-
-SOFTDELETE_PROJECTS=(
-  "src/AuditLog.EntityFrameworkCore.SoftDelete/AuditLog.EntityFrameworkCore.SoftDelete.csproj"
-  "src/AuditLog.Generator.SoftDelete/AuditLog.Generator.SoftDelete.csproj"
-)
-
-ALL_PROJECTS=("${CORE_PROJECTS[@]}" "${SOFTDELETE_PROJECTS[@]}")
-
-for project in "${ALL_PROJECTS[@]}"; do
-  echo "    Packing $project..."
-  dotnet pack "$ROOT_DIR/$project" \
+pack_project() {
+  echo "    Packing $1..."
+  dotnet pack "$ROOT_DIR/$1" \
     --configuration "$CONFIGURATION" \
     --no-build \
     --output "$PACKAGES_DIR"
-done
+}
+
+echo ""
+echo "==> Packing core (AuditLog)..."
+
+pack_project "src/AuditLog.Abstractions/AuditLog.Abstractions.csproj"
+pack_project "src/AuditLog.EntityFrameworkCore/AuditLog.EntityFrameworkCore.csproj"
+pack_project "src/AuditLog.Generator/AuditLog.Generator.csproj"
+
+echo ""
+echo "==> Packing optional (SoftDelete)..."
+
+pack_project "src/AuditLog.EntityFrameworkCore.SoftDelete/AuditLog.EntityFrameworkCore.SoftDelete.csproj"
+pack_project "src/AuditLog.Generator.SoftDelete/AuditLog.Generator.SoftDelete.csproj"
 
 echo ""
 echo "==> Packages generated in $PACKAGES_DIR:"
