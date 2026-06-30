@@ -1,0 +1,48 @@
+name: Publish to NuGet
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --configuration Release --no-build
+
+      - name: Pack core projects
+        run: |
+          dotnet pack src/AuditLog.Abstractions/AuditLog.Abstractions.csproj \
+            --configuration Release --no-build \
+            --output "${{ runner.temp }}/packages"
+
+          dotnet pack src/AuditLog.EntityFrameworkCore/AuditLog.EntityFrameworkCore.csproj \
+            --configuration Release --no-build \
+            --output "${{ runner.temp }}/packages"
+
+          dotnet pack src/AuditLog.Generator/AuditLog.Generator.csproj \
+            --configuration Release --no-build \
+            --output "${{ runner.temp }}/packages"
+
+      - name: Push to NuGet
+        run: |
+          dotnet nuget push "${{ runner.temp }}/packages/*.nupkg" \
+            --source "${{ secrets.NUGET_SOURCE || 'https://api.nuget.org/v3/index.json' }}" \
+            --api-key "${{ secrets.NUGET_API_KEY }}" \
+            --skip-duplicate
