@@ -27,7 +27,9 @@ jobs:
         run: dotnet build --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test --configuration Release --no-build
+        run: |
+          dotnet test tests/AuditLog.Tests --configuration Release --no-build
+          dotnet test tests/AuditLog.IntegrationTests --configuration Release --no-build
 
       - name: Pack core projects
         run: |
