@@ -8,8 +8,11 @@
     <RootNamespace>AuditLog.Generator.SoftDelete</RootNamespace>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <IsRoslynComponent>true</IsRoslynComponent>
-    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <IncludeBuildOutput>true</IncludeBuildOutput>
     <DevelopmentDependency>true</DevelopmentDependency>
+    <NoPackageAnalysis>true</NoPackageAnalysis>
+    <Description>Roslyn source generator for AuditLog SoftDelete — generates ISoftDeleteHandler&lt;T&gt; classes, registry extensions, and cascading delete logic from Fluent API configuration.</Description>
+    <PackageId>AuditLog.Generator.SoftDelete</PackageId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,12 +21,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Shared source files linked (compiled into this assembly) -->
     <Compile Include="..\AuditLog.Generator.Shared\*.cs" Link="Shared\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="build\AuditLog.Generator.SoftDelete.props" Pack="true" PackagePath="build\" Visible="false" />
+    <None Include="build\AuditLog.Generator.SoftDelete.props" Pack="true" PackagePath="buildTransitive\" Visible="false" />
   </ItemGroup>
 
 </Project>

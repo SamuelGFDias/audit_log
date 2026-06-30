@@ -4,6 +4,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <RootNamespace>AuditLog.EntityFrameworkCore.SoftDelete</RootNamespace>
+    <Description>EF Core Soft Delete integration — ISoftDeleteEntity, query filters, interceptor, cascade/restrict/setnull handlers, and source generator registry.</Description>
+    <PackageId>AuditLog.EntityFrameworkCore.SoftDelete</PackageId>
   </PropertyGroup>
 
   <ItemGroup>

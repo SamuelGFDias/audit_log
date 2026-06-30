@@ -16,8 +16,8 @@ public sealed class SoftDeleteGenerator : IIncrementalGenerator
             .CreateSyntaxProvider(
                 predicate: static (node, _) => EntityDetector.IsDbContextCandidate(node),
                 transform: static (ctx, _) => EntityDetector.GetDbContextTarget(ctx))
-            .Where(static m => m is not null)
-            .Select(static (m, _) => m!)
+            .Where(static m => m.dbContext is not null)
+            .Select(static (m, _) => (m.dbContext!, m.relationships))
             .Collect();
 
         context.RegisterSourceOutput(dbContexts, static (ctx, infos) => GenerateAll(ctx, infos));
@@ -25,57 +25,38 @@ public sealed class SoftDeleteGenerator : IIncrementalGenerator
 
     private static void GenerateAll(
         SourceProductionContext context,
-        ImmutableArray<DbContextInfo> dbContexts)
+        ImmutableArray<(DbContextInfo dbContext, ImmutableArray<RelationshipConfig> relationships)> dbContexts)
     {
         if (dbContexts.Length == 0) return;
 
-        // Deduplicate entities across all DbContexts (same full name = same entity)
         var seenEntities = new HashSet<string>();
         var allEntities = ImmutableArray.CreateBuilder<EntityInfo>();
 
-        foreach (var dbCtx in dbContexts)
+        foreach (var (dbCtx, rels) in dbContexts)
         {
             foreach (var entity in dbCtx.Entities)
             {
                 if (seenEntities.Add(entity.FullName))
                 {
-                    var fks = ImmutableArray.CreateBuilder<RelationshipInfo>();
-                    fks.AddRange(entity.ReferencingFks);
-
-                    foreach (var otherCtx in dbContexts)
-                    {
-                        foreach (var other in otherCtx.Entities)
-                        {
-                            if (other.FullName == entity.FullName) continue;
-                            foreach (var fk in other.OwnFkProperties)
-                            {
-                                if (fk.TargetEntityName == entity.Name ||
-                                    fk.TargetEntityName == GetShortName(entity.FullName))
-                                {
-                                    bool exists = false;
-                                    foreach (var existing in fks)
-                                    {
-                                        if (existing.DependentEntityFullName == other.FullName &&
-                                            existing.FkPropertyName == fk.PropertyName)
-                                        { exists = true; break; }
-                                    }
-                                    if (!exists)
-                                    {
-                                        fks.Add(new RelationshipInfo(
-                                            other.FullName, other.Name,
-                                            fk.PropertyName, fk.PropertyType,
-                                            entity.PrimaryKeyName, fk.IsNullable,
-                                            fk.DeleteBehavior, false, other.IsSoftDelete));
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    var referencingFks = rels
+                        .Where(r => r.PrincipalEntity == entity.Name && !r.IsOwnership)
+                        .Select(r => new RelationshipInfo(
+                            r.DependentEntityFullName,
+                            r.DependentEntityName,
+                            r.FkPropertyName,
+                            r.FkPropertyType,
+                            entity.PrimaryKeyName,
+                            r.FkIsNullable,
+                            r.DeleteBehavior,
+                            false,
+                            r.DependentIsSoftDelete))
+                        .ToImmutableArray();
 
                     allEntities.Add(new EntityInfo(
                         entity.Namespace, entity.Name, entity.FullName,
                         entity.PrimaryKeyType, entity.PrimaryKeyName, entity.IsSoftDelete,
-                        entity.OwnFkProperties, fks.ToImmutable()));
+                        ImmutableArray<FkProperty>.Empty,
+                        referencingFks));
                 }
             }
         }
@@ -85,15 +66,9 @@ public sealed class SoftDeleteGenerator : IIncrementalGenerator
         foreach (var entity in finalEntities)
         {
             if (!entity.IsSoftDelete) continue;
-            HandlerGenerator.GenerateHandlerClass(context, entity, dbContexts[0].FullName);
+            HandlerGenerator.GenerateHandlerClass(context, entity, dbContexts[0].dbContext.FullName);
         }
 
-        RegistryGenerator.GenerateRegistryExtension(context, finalEntities, dbContexts[0].FullName);
-    }
-
-    private static string GetShortName(string fullName)
-    {
-        var dot = fullName.LastIndexOf('.');
-        return dot >= 0 ? fullName.Substring(dot + 1) : fullName;
+        RegistryGenerator.GenerateRegistryExtension(context, finalEntities, dbContexts[0].dbContext.FullName);
     }
 }

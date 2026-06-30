@@ -13,7 +13,6 @@ internal static class EntityDetector
 {
     public const string ISoftDeleteEntityInterface = "AuditLog.EntityFrameworkCore.SoftDelete.ISoftDeleteEntity";
     public const string GenerateSoftDeleteAttribute = "AuditLog.EntityFrameworkCore.SoftDelete.GenerateSoftDeleteAttribute";
-    public const string DeleteBehaviorAttr = "AuditLog.EntityFrameworkCore.SoftDelete.DeleteBehaviorAttribute";
 
     public static bool IsCandidate(SyntaxNode node)
     {
@@ -25,16 +24,21 @@ internal static class EntityDetector
         return node is ClassDeclarationSyntax { AttributeLists.Count: > 0, BaseList: not null };
     }
 
-    public static DbContextInfo? GetDbContextTarget(GeneratorSyntaxContext context)
+    public static (DbContextInfo? dbContext, ImmutableArray<RelationshipConfig> relationships) GetDbContextTarget(
+        GeneratorSyntaxContext context)
     {
-        var typeSymbol = GetTypeSymbol(context);
-        if (typeSymbol is null) return null;
-        if (!typeSymbol.HasAttribute(GenerateSoftDeleteAttribute)) return null;
+        var classDecl = (ClassDeclarationSyntax)context.Node;
+        var typeSymbol = context.SemanticModel.GetDeclaredSymbol(classDecl) as INamedTypeSymbol;
+        if (typeSymbol is null) return (null, ImmutableArray<RelationshipConfig>.Empty);
+
+        if (!typeSymbol.HasAttribute(GenerateSoftDeleteAttribute)) return (null, ImmutableArray<RelationshipConfig>.Empty);
 
         var baseType = typeSymbol.BaseType;
-        if (baseType is null || baseType.Name != "DbContext") return null;
+        if (baseType is null || baseType.Name != "DbContext") return (null, ImmutableArray<RelationshipConfig>.Empty);
 
         var entities = new List<EntityInfo>();
+        var entityLookup = new Dictionary<string, (ITypeSymbol type, string fullName)>();
+
         foreach (var member in typeSymbol.GetMembers())
         {
             if (member is not IPropertySymbol prop) continue;
@@ -44,26 +48,54 @@ internal static class EntityDetector
             var entityType = dbSet.TypeArguments[0];
             if (entityType is INamedTypeSymbol entityNamed)
             {
-                var info = AnalyzeEntity(context, entityType);
+                var info = AnalyzeEntity(entityType);
                 if (info is not null)
+                {
                     entities.Add(info);
+                    entityLookup[info.Name] = (entityType, info.FullName);
+                }
             }
         }
 
-        return new DbContextInfo(
+        if (entities.Count == 0) return (null, ImmutableArray<RelationshipConfig>.Empty);
+
+        var relationships = FluentApiParser.ParseOnModelCreating(classDecl, typeSymbol, entities.ToImmutableArray(), context);
+
+        var entityMap = entities.ToDictionary(e => e.Name, e => e);
+
+        var updatedEntities = entities.Select(e =>
+        {
+            var referencingFks = relationships
+                .Where(r => r.PrincipalEntity == e.Name && !r.IsOwnership)
+                .Select(r => new RelationshipInfo(
+                    r.DependentEntityFullName,
+                    r.DependentEntityName,
+                    r.FkPropertyName,
+                    r.FkPropertyType,
+                    e.PrimaryKeyName,
+                    r.FkIsNullable,
+                    r.DeleteBehavior,
+                    false,
+                    r.DependentIsSoftDelete))
+                .ToImmutableArray();
+
+            return new EntityInfo(
+                e.Namespace, e.Name, e.FullName,
+                e.PrimaryKeyType, e.PrimaryKeyName, e.IsSoftDelete,
+                ImmutableArray<FkProperty>.Empty,
+                referencingFks);
+        }).ToImmutableArray();
+
+        var dbContext = new DbContextInfo(
             typeSymbol.ContainingNamespace.ToDisplayString(),
             typeSymbol.Name,
             typeSymbol.ToDisplayString(),
-            entities.ToImmutableArray());
+            updatedEntities);
+
+        return (dbContext, relationships);
     }
 
-    private static INamedTypeSymbol? GetTypeSymbol(GeneratorSyntaxContext context)
-    {
-        if (context.Node is not ClassDeclarationSyntax classDecl) return null;
-        return context.SemanticModel.GetDeclaredSymbol(classDecl) as INamedTypeSymbol;
-    }
-
-    public static EntityInfo? AnalyzeEntity(GeneratorSyntaxContext context, ITypeSymbol typeSymbol)
+    public static EntityInfo? AnalyzeEntity(ITypeSymbol typeSymbol)
     {
         var isSoftDelete = typeSymbol.ImplementsInterface(ISoftDeleteEntityInterface);
 
@@ -84,151 +116,8 @@ internal static class EntityDetector
             break;
         }
 
-        var ownFks = new List<FkProperty>();
-        foreach (var member in typeSymbol.GetMembers())
-        {
-            if (member is not IPropertySymbol prop) continue;
-            var propName = prop.Name;
-            if (propName == pkName) continue;
-
-            if (propName.EndsWith("Id"))
-            {
-                var targetName = propName.Substring(0, propName.Length - 2);
-                var behavior = InferDeleteBehavior(prop, typeSymbol);
-                ownFks.Add(new FkProperty(
-                    propName,
-                    GetFullyQualifiedTypeName(prop.Type),
-                    prop.Type.NullableAnnotation == NullableAnnotation.Annotated,
-                    targetName,
-                    behavior));
-            }
-        }
-
-        foreach (var member in typeSymbol.GetMembers())
-        {
-            if (member is not IPropertySymbol navProp) continue;
-            if (!HasCollectionType(navProp.Type)) continue;
-
-            var elementType = RoslynExtensions.GetCollectionElementType(navProp.Type);
-            if (elementType is null) continue;
-
-            var hasBehaviorAttr = navProp.HasAttribute(DeleteBehaviorAttr);
-            if (!hasBehaviorAttr) continue;
-
-            var behavior = ExtractDeleteBehaviorFromAttr(navProp);
-            if (behavior is null) continue;
-
-            var fkOnTarget = FindFkOnTarget(elementType, typeSymbol);
-            if (fkOnTarget is null) continue;
-
-            ownFks.Add(new FkProperty(
-                fkOnTarget.Name,
-                GetFullyQualifiedTypeName(fkOnTarget.Type),
-                fkOnTarget.Type.NullableAnnotation == NullableAnnotation.Annotated,
-                typeSymbol.Name,
-                behavior));
-        }
-
-        return new EntityInfo(ns, name, fullName, pkType, pkName, isSoftDelete, ownFks.ToImmutableArray());
-    }
-
-    private static string InferDeleteBehavior(IPropertySymbol fkProperty, ITypeSymbol entityType)
-    {
-        if (fkProperty.HasAttribute(DeleteBehaviorAttr))
-        {
-            var behavior = ExtractDeleteBehaviorFromAttr(fkProperty);
-            if (behavior is not null) return behavior;
-        }
-
-        foreach (var member in entityType.GetMembers())
-        {
-            if (member is not IPropertySymbol navProp) continue;
-            if (!HasCollectionType(navProp.Type)) continue;
-
-            var elementType = RoslynExtensions.GetCollectionElementType(navProp.Type);
-            if (elementType is null) continue;
-
-            var fkName = fkProperty.Name;
-            var relatedName = fkName.EndsWith("Id") ? fkName.Substring(0, fkName.Length - 2) : "";
-
-            if (elementType.Name == relatedName)
-            {
-                if (navProp.HasAttribute(DeleteBehaviorAttr))
-                {
-                    var behavior = ExtractDeleteBehaviorFromAttr(navProp);
-                    if (behavior is not null) return behavior;
-                }
-            }
-        }
-
-        if (fkProperty.Type.NullableAnnotation == NullableAnnotation.Annotated)
-            return "SetNull";
-
-        return "Restrict";
-    }
-
-    private static string? ExtractDeleteBehaviorFromAttr(ISymbol symbol)
-    {
-        foreach (var attr in symbol.GetAttributes())
-        {
-            if (attr.AttributeClass?.ToDisplayString() != DeleteBehaviorAttr) continue;
-            if (attr.ConstructorArguments.Length == 0) continue;
-            var value = attr.ConstructorArguments[0].Value;
-            if (value is int intVal)
-            {
-                return intVal switch
-                {
-                    0 => "Cascade",
-                    1 => "Restrict",
-                    2 => "SetNull",
-                    _ => null
-                };
-            }
-        }
-        return null;
-    }
-
-    private static bool HasCollectionType(ITypeSymbol type)
-    {
-        if (type is not INamedTypeSymbol named) return false;
-        foreach (var iface in named.AllInterfaces)
-        {
-            if (iface.Name is "IEnumerable" or "ICollection" or "IList")
-                return true;
-        }
-        return false;
-    }
-
-    private static IPropertySymbol? FindFkOnTarget(ITypeSymbol targetType, ITypeSymbol principalType)
-    {
-        var principalName = principalType.Name;
-        foreach (var member in targetType.GetMembers())
-        {
-            if (member is not IPropertySymbol prop) continue;
-            if (prop.Name == principalName + "Id" || prop.Name == principalName + "_Id")
-                return prop;
-        }
-        var pkProp = GetPrimaryKeyProperty(principalType);
-        if (pkProp is null) return null;
-        foreach (var member in targetType.GetMembers())
-        {
-            if (member is not IPropertySymbol prop) continue;
-            if (!prop.Name.EndsWith("Id")) continue;
-            if (SymbolEqualityComparer.Default.Equals(prop.Type, pkProp.Type))
-                return prop;
-        }
-        return null;
-    }
-
-    private static IPropertySymbol? GetPrimaryKeyProperty(ITypeSymbol type)
-    {
-        foreach (var member in type.GetMembers())
-        {
-            if (member is not IPropertySymbol prop) continue;
-            if (prop.Name == "Id" || prop.Name == type.Name + "Id")
-                return prop;
-        }
-        return null;
+        return new EntityInfo(ns, name, fullName, pkType, pkName, isSoftDelete,
+            ImmutableArray<FkProperty>.Empty, ImmutableArray<RelationshipInfo>.Empty);
     }
 
     internal static string GetFullyQualifiedTypeName(ITypeSymbol type)

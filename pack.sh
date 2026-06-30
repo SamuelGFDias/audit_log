@@ -24,7 +24,14 @@ CORE_PROJECTS=(
   "src/AuditLog.Generator/AuditLog.Generator.csproj"
 )
 
-for project in "${CORE_PROJECTS[@]}"; do
+SOFTDELETE_PROJECTS=(
+  "src/AuditLog.EntityFrameworkCore.SoftDelete/AuditLog.EntityFrameworkCore.SoftDelete.csproj"
+  "src/AuditLog.Generator.SoftDelete/AuditLog.Generator.SoftDelete.csproj"
+)
+
+ALL_PROJECTS=("${CORE_PROJECTS[@]}" "${SOFTDELETE_PROJECTS[@]}")
+
+for project in "${ALL_PROJECTS[@]}"; do
   echo "    Packing $project..."
   dotnet pack "$ROOT_DIR/$project" \
     --configuration "$CONFIGURATION" \

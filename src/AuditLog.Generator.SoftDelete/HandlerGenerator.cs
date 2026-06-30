@@ -39,21 +39,21 @@ internal static class HandlerGenerator
         // HandleDeleteAsync
         StringBuilderExtensions.AppendLine(sb, 1, $"public async System.Threading.Tasks.Task HandleDeleteAsync(DbContext ctx, {entity.FullName} entity, System.DateTime deletedAt)");
         StringBuilderExtensions.AppendLine(sb, 1, "{");
-        sb.AppendLine();
 
         if (hasRestrict)
         {
-            foreach (var fk in entity.ReferencingFks)
-            {
-                if (fk.IsOwnership || fk.DeleteBehavior != "Restrict") continue;
-                StringBuilderExtensions.AppendLine(sb, 2, $"if (await ctx.Set<{fk.DependentEntityFullName}>().IgnoreQueryFilters().AnyAsync(x => x.{fk.FkPropertyName} == entity.{entity.PrimaryKeyName}))");
-                StringBuilderExtensions.AppendLine(sb, 3, $"throw new RestrictDeleteViolationException(\"{entity.Name}\", [entity.{entity.PrimaryKeyName}]);");
-            }
+            StringBuilderExtensions.AppendLine(sb, 2, $"if (await ExistsRestrictAsync(ctx, entity.{entity.PrimaryKeyName}))");
+            StringBuilderExtensions.AppendLine(sb, 3, $"throw new RestrictDeleteViolationException(\"{entity.Name}\", [entity.{entity.PrimaryKeyName}]);");
+            sb.AppendLine();
         }
 
-        if (hasCascade || hasSetNull)
+        if (hasSetNull)
         {
-            sb.AppendLine();
+            StringBuilderExtensions.AppendLine(sb, 2, $"await HandleSetNullAsync(ctx, entity.{entity.PrimaryKeyName});");
+        }
+
+        if (hasCascade)
+        {
             StringBuilderExtensions.AppendLine(sb, 2, "var visited = new System.Collections.Generic.HashSet<object>();");
             StringBuilderExtensions.AppendLine(sb, 2, $"await HandleCascadeAsync(ctx, entity.{entity.PrimaryKeyName}, deletedAt, visited);");
         }
@@ -62,68 +62,76 @@ internal static class HandlerGenerator
         sb.AppendLine();
 
         // MarkDeleted (used for cascade dependents)
-        StringBuilderExtensions.AppendLine(sb, 1, $"public static void MarkDeleted(DbContext ctx, {entity.FullName} entity, System.DateTime deletedAt)");
+        StringBuilderExtensions.AppendLine(sb, 1, $"internal static void MarkDeleted(DbContext ctx, {entity.FullName} entity, System.DateTime deletedAt)");
         StringBuilderExtensions.AppendLine(sb, 1, "{");
         StringBuilderExtensions.AppendLine(sb, 2, "SoftDeleteInterceptor.MarkSoftDeleted(ctx.Entry(entity), deletedAt);");
         StringBuilderExtensions.AppendLine(sb, 1, "}");
         sb.AppendLine();
 
+        // HandleSetNullAsync
+        if (hasSetNull)
+        {
+            StringBuilderExtensions.AppendLine(sb, 1, $"private static async System.Threading.Tasks.Task HandleSetNullAsync(");
+            StringBuilderExtensions.AppendLine(sb, 2, $"DbContext context, {entity.PrimaryKeyType} {FirstLower(entity.PrimaryKeyName)})");
+            StringBuilderExtensions.AppendLine(sb, 1, "{");
+
+            foreach (var fk in entity.ReferencingFks)
+            {
+                if (fk.IsOwnership || fk.DeleteBehavior != "SetNull") continue;
+                sb.AppendLine();
+                StringBuilderExtensions.AppendLine(sb, 2, $"// SetNull: {fk.DependentEntityName}.{fk.FkPropertyName} -> null");
+                StringBuilderExtensions.AppendLine(sb, 2, $"var {FirstLower(fk.DependentEntityName)}NullList = await context.Set<{fk.DependentEntityFullName}>()");
+                StringBuilderExtensions.AppendLine(sb, 3, ".IgnoreQueryFilters()");
+                StringBuilderExtensions.AppendLine(sb, 3, $".Where(x => x.{fk.FkPropertyName} == {FirstLower(entity.PrimaryKeyName)}).ToListAsync();");
+                sb.AppendLine();
+                StringBuilderExtensions.AppendLine(sb, 2, $"foreach (var d in {FirstLower(fk.DependentEntityName)}NullList)");
+                StringBuilderExtensions.AppendLine(sb, 2, "{");
+                StringBuilderExtensions.AppendLine(sb, 3, $"d.{fk.FkPropertyName} = null;");
+                StringBuilderExtensions.AppendLine(sb, 2, "}");
+            }
+
+            StringBuilderExtensions.AppendLine(sb, 1, "}");
+            sb.AppendLine();
+        }
+
         // HandleCascadeAsync
-        StringBuilderExtensions.AppendLine(sb, 1, $"public static async System.Threading.Tasks.Task HandleCascadeAsync(");
+        StringBuilderExtensions.AppendLine(sb, 1, $"internal static async System.Threading.Tasks.Task HandleCascadeAsync(");
         StringBuilderExtensions.AppendLine(sb, 2, $"DbContext context, {entity.PrimaryKeyType} {FirstLower(entity.PrimaryKeyName)}, System.DateTime deletedAt, System.Collections.Generic.HashSet<object> visited)");
         StringBuilderExtensions.AppendLine(sb, 1, "{");
 
         foreach (var fk in entity.ReferencingFks)
         {
-            if (fk.IsOwnership) continue;
-
-            switch (fk.DeleteBehavior)
+            if (fk.IsOwnership || fk.DeleteBehavior != "Cascade") continue;
+            sb.AppendLine();
+            StringBuilderExtensions.AppendLine(sb, 2, $"// Cascade: {fk.DependentEntityName}.{fk.FkPropertyName} -> {entity.Name}.{entity.PrimaryKeyName}");
+            StringBuilderExtensions.AppendLine(sb, 2, $"var {FirstLower(fk.DependentEntityName)}List = await context.Set<{fk.DependentEntityFullName}>()");
+            StringBuilderExtensions.AppendLine(sb, 3, ".IgnoreQueryFilters()");
+            StringBuilderExtensions.AppendLine(sb, 3, $".Where(x => x.{fk.FkPropertyName} == {FirstLower(entity.PrimaryKeyName)}).ToListAsync();");
+            sb.AppendLine();
+            StringBuilderExtensions.AppendLine(sb, 2, $"foreach (var d in {FirstLower(fk.DependentEntityName)}List)");
+            StringBuilderExtensions.AppendLine(sb, 2, "{");
+            StringBuilderExtensions.AppendLine(sb, 3, "if (visited.Add(d))");
+            StringBuilderExtensions.AppendLine(sb, 3, "{");
+            if (fk.DependentIsSoftDelete)
             {
-                case "Cascade":
-                    sb.AppendLine();
-                    StringBuilderExtensions.AppendLine(sb, 2, $"// Cascade: {fk.DependentEntityName}.{fk.FkPropertyName} -> {entity.Name}.{entity.PrimaryKeyName}");
-                    StringBuilderExtensions.AppendLine(sb, 2, $"var {FirstLower(fk.DependentEntityName)}List = await context.Set<{fk.DependentEntityFullName}>()");
-                    StringBuilderExtensions.AppendLine(sb, 3, ".IgnoreQueryFilters()");
-                    StringBuilderExtensions.AppendLine(sb, 3, $".Where(x => x.{fk.FkPropertyName} == {FirstLower(entity.PrimaryKeyName)}).ToListAsync();");
-                    sb.AppendLine();
-                    StringBuilderExtensions.AppendLine(sb, 2, $"foreach (var d in {FirstLower(fk.DependentEntityName)}List)");
-                    StringBuilderExtensions.AppendLine(sb, 2, "{");
-                    StringBuilderExtensions.AppendLine(sb, 3, "if (visited.Add(d))");
-                    StringBuilderExtensions.AppendLine(sb, 3, "{");
-                    if (fk.DependentIsSoftDelete)
-                    {
-                        StringBuilderExtensions.AppendLine(sb, 4, $"{fk.DependentEntityName}SoftDeleteHandler.MarkDeleted(context, d, deletedAt);");
-                        StringBuilderExtensions.AppendLine(sb, 4, $"await {fk.DependentEntityName}SoftDeleteHandler.HandleCascadeAsync(context, d.{fk.FkPropertyName}!, deletedAt, visited);");
-                    }
-                    else
-                    {
-                        StringBuilderExtensions.AppendLine(sb, 4, "context.Entry(d).State = Microsoft.EntityFrameworkCore.EntityState.Deleted;");
-                    }
-                    StringBuilderExtensions.AppendLine(sb, 3, "}");
-                    StringBuilderExtensions.AppendLine(sb, 2, "}");
-                    break;
-
-                case "SetNull":
-                    sb.AppendLine();
-                    StringBuilderExtensions.AppendLine(sb, 2, $"// SetNull: {fk.DependentEntityName}.{fk.FkPropertyName} -> null");
-                    StringBuilderExtensions.AppendLine(sb, 2, $"var {FirstLower(fk.DependentEntityName)}NullList = await context.Set<{fk.DependentEntityFullName}>()");
-                    StringBuilderExtensions.AppendLine(sb, 3, ".IgnoreQueryFilters()");
-                    StringBuilderExtensions.AppendLine(sb, 3, $".Where(x => x.{fk.FkPropertyName} == {FirstLower(entity.PrimaryKeyName)}).ToListAsync();");
-                    sb.AppendLine();
-                    StringBuilderExtensions.AppendLine(sb, 2, $"foreach (var d in {FirstLower(fk.DependentEntityName)}NullList)");
-                    StringBuilderExtensions.AppendLine(sb, 2, "{");
-                    StringBuilderExtensions.AppendLine(sb, 3, $"d.{fk.FkPropertyName} = null;");
-                    StringBuilderExtensions.AppendLine(sb, 2, "}");
-                    break;
+                StringBuilderExtensions.AppendLine(sb, 4, $"{fk.DependentEntityName}SoftDeleteHandler.MarkDeleted(context, d, deletedAt);");
+                StringBuilderExtensions.AppendLine(sb, 4, $"await {fk.DependentEntityName}SoftDeleteHandler.HandleCascadeAsync(context, d.{fk.FkPropertyName}!.Value, deletedAt, visited);");
             }
+            else
+            {
+                StringBuilderExtensions.AppendLine(sb, 4, "context.Entry(d).State = Microsoft.EntityFrameworkCore.EntityState.Deleted;");
+            }
+            StringBuilderExtensions.AppendLine(sb, 3, "}");
+            StringBuilderExtensions.AppendLine(sb, 2, "}");
         }
 
         StringBuilderExtensions.AppendLine(sb, 1, "}");
+        sb.AppendLine();
 
+        // ExistsRestrictAsync
         if (hasRestrict)
         {
-            sb.AppendLine();
-            StringBuilderExtensions.AppendLine(sb, 1, $"public static async System.Threading.Tasks.Task<bool> ExistsRestrictAsync(");
+            StringBuilderExtensions.AppendLine(sb, 1, $"private static async System.Threading.Tasks.Task<bool> ExistsRestrictAsync(");
             StringBuilderExtensions.AppendLine(sb, 2, $"DbContext context, {entity.PrimaryKeyType} {FirstLower(entity.PrimaryKeyName)})");
             StringBuilderExtensions.AppendLine(sb, 1, "{");
 

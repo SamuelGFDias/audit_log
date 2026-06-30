@@ -45,6 +45,22 @@ jobs:
             --configuration Release --no-build \
             --output "${{ runner.temp }}/packages"
 
+          dotnet pack src/AuditLog.EntityFrameworkCore.SoftDelete/AuditLog.EntityFrameworkCore.SoftDelete.csproj \
+            --configuration Release --no-build \
+            --output "${{ runner.temp }}/packages"
+
+          dotnet pack src/AuditLog.Generator.SoftDelete/AuditLog.Generator.SoftDelete.csproj \
+            --configuration Release --no-build \
+            --output "${{ runner.temp }}/packages"
+
+          dotnet pack src/AuditLog.EntityFrameworkCore/AuditLog.EntityFrameworkCore.csproj \
+            --configuration Release --no-build \
+            --output "${{ runner.temp }}/packages"
+
+          dotnet pack src/AuditLog.Generator/AuditLog.Generator.csproj \
+            --configuration Release --no-build \
+            --output "${{ runner.temp }}/packages"
+
       - name: NuGet login (OIDC → temp API key)
         uses: NuGet/login@v1
         id: login

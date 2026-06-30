@@ -13,4 +13,7 @@
     <Project Path="tests/AuditLog.SoftDelete.Reflection.Tests/AuditLog.SoftDelete.Reflection.Tests.csproj" />
     <Project Path="tests/AuditLog.Tests/AuditLog.Tests.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/AuditLogSample/AuditLogSample.csproj" />
+  </Folder>
 </Solution>
