@@ -18,6 +18,7 @@
 
   <PropertyGroup>
     <MinVerSkip Condition="$(Configuration) == 'Debug'">true</MinVerSkip>
+    <MinVerTagPrefix>v</MinVerTagPrefix>
   </PropertyGroup>
 
   <ItemGroup>
