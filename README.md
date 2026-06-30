@@ -1,5 +1,7 @@
 # AuditLog
 
+[![Publish to NuGet](https://github.com/SamuelGFDias/audit_log/actions/workflows/publish.yml/badge.svg)](https://github.com/SamuelGFDias/audit_log/actions/workflows/publish.yml)
+
 Biblioteca de auditoria automática para EF Core com Source Generators Roslyn.
 
 ## Pacotes
