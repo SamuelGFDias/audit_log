@@ -109,7 +109,7 @@ internal static class EntityDetector
             if (member is not IPropertySymbol navProp) continue;
             if (!HasCollectionType(navProp.Type)) continue;
 
-            var elementType = GetCollectionElementType(navProp.Type);
+            var elementType = RoslynExtensions.GetCollectionElementType(navProp.Type);
             if (elementType is null) continue;
 
             var hasBehaviorAttr = navProp.HasAttribute(DeleteBehaviorAttr);
@@ -145,7 +145,7 @@ internal static class EntityDetector
             if (member is not IPropertySymbol navProp) continue;
             if (!HasCollectionType(navProp.Type)) continue;
 
-            var elementType = GetCollectionElementType(navProp.Type);
+            var elementType = RoslynExtensions.GetCollectionElementType(navProp.Type);
             if (elementType is null) continue;
 
             var fkName = fkProperty.Name;
@@ -197,19 +197,6 @@ internal static class EntityDetector
                 return true;
         }
         return false;
-    }
-
-    private static ITypeSymbol? GetCollectionElementType(ITypeSymbol type)
-    {
-        if (type is not INamedTypeSymbol named) return null;
-        foreach (var iface in named.AllInterfaces)
-        {
-            if (iface is INamedTypeSymbol { Name: "IEnumerable" } ie && ie.TypeArguments.Length == 1)
-                return ie.TypeArguments[0];
-        }
-        if (named.TypeArguments.Length == 1)
-            return named.TypeArguments[0];
-        return null;
     }
 
     private static IPropertySymbol? FindFkOnTarget(ITypeSymbol targetType, ITypeSymbol principalType)

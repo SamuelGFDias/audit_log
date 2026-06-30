@@ -25,13 +25,7 @@ internal static class ConfiguratorDetector
         var typeSymbol = context.SemanticModel.GetDeclaredSymbol(classDecl);
         if (typeSymbol is null) return null;
 
-        var hasAttr = false;
-        foreach (var attr in typeSymbol.GetAttributes())
-        {
-            if (attr.AttributeClass?.ToDisplayString() == GenerateAuditLogAttribute)
-            { hasAttr = true; break; }
-        }
-        if (!hasAttr) return null;
+        if (!typeSymbol.HasAttribute(GenerateAuditLogAttribute)) return null;
 
         var baseType = typeSymbol.BaseType;
         if (baseType is null) return null;
@@ -64,10 +58,54 @@ internal static class ConfiguratorDetector
             }
         }
 
+        var configuredNames = new HashSet<string>();
+        foreach (var p in entityProperties)
+            configuredNames.Add(p.PropertyName);
+
+        var pkName = DetectPrimaryKeyName(entityType);
+
+        foreach (var member in entityType.GetMembers())
+        {
+            if (member is not IPropertySymbol prop) continue;
+            if (prop.IsStatic || prop.IsIndexer) continue;
+            if (configuredNames.Contains(prop.Name)) continue;
+            if (RoslynExtensions.GetCollectionElementType(prop.Type) is not null) continue;
+            if (!IsSimpleScalarType(prop.Type)) continue;
+
+            var isKey = prop.Name == pkName;
+            entityProperties.Add(new PropertyConfig(
+                prop.Name, null, isKey, false, false, false, null, 0, false));
+        }
+
         return new ConfiguratorInfo(
             entityNamespace, configuratorNamespace, configuratorName,
             entityName, auditLogName,
             entityProperties.ToImmutableArray(),
             collectionConfigs.ToImmutableArray());
+    }
+
+    private static bool IsSimpleScalarType(ITypeSymbol type)
+    {
+        if (type.SpecialType != SpecialType.None) return true;
+        if (type.TypeKind == TypeKind.Enum) return true;
+        if (type is INamedTypeSymbol { IsGenericType: true, Name: "Nullable" }) return true;
+
+        var name = type.ToDisplayString();
+        return name is "System.Guid" or "System.DateTimeOffset"
+            or "System.DateOnly" or "System.TimeOnly"
+            or "System.Half" or "System.Int128" or "System.UInt128"
+            or "System.Numerics.BigInteger";
+    }
+
+    private static string? DetectPrimaryKeyName(ITypeSymbol entityType)
+    {
+        var entityName = entityType.Name;
+        foreach (var member in entityType.GetMembers())
+        {
+            if (member is not IPropertySymbol prop) continue;
+            if (prop.Name == "Id" || prop.Name == entityName + "Id")
+                return prop.Name;
+        }
+        return null;
     }
 }

@@ -4,7 +4,7 @@ using System.Text;
 
 namespace AuditLog.Generator;
 
-public static class SourceProductionContextExtensions
+internal static class SourceProductionContextExtensions
 {
 public static void AddHintSource(SourceProductionContext context, string ns, string fileName, string source)
 {

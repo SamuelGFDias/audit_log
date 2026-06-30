@@ -6,7 +6,7 @@ using System.Linq;
 
 namespace AuditLog.Generator;
 
-public static class RoslynExtensions
+internal static class RoslynExtensions
 {
     public static string? GetFullName(this ITypeSymbol type)
         => type is INamedTypeSymbol named
