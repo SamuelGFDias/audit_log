@@ -232,7 +232,7 @@ internal static class FluentApiParser
             configs.Add(new RelationshipConfig
             {
                 PrincipalEntity = principalEntity,
-                NavigationProperty = navProperty,
+                NavigationProperty = navProperty ?? "",
                 IsOwnership = true
             });
             return configs;
@@ -243,7 +243,7 @@ internal static class FluentApiParser
             : principalEntity + "Id";
 
         var dependentEntityName = ResolveDependentEntityName(
-            principalEntity, navProperty, fkName, entities, entitySymbols);
+            principalEntity, navProperty ?? "", fkName, entities, entitySymbols);
 
         var fkNullable = false;
         var fkType = "global::System.Guid";
@@ -272,7 +272,7 @@ internal static class FluentApiParser
         configs.Add(new RelationshipConfig
         {
             PrincipalEntity = principalEntity,
-            NavigationProperty = navProperty,
+            NavigationProperty = navProperty ?? "",
             DependentEntityFullName = dependentFullName,
             DependentEntityName = dependentEntityName,
             FkPropertyName = fkName,

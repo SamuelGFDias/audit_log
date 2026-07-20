@@ -24,7 +24,7 @@ internal static class ExtensionGenerator
         sb.AppendLine("#nullable enable");
         sb.AppendLine();
         sb.AppendLine("using AuditLog.Abstractions;");
-        foreach (var entityNs in usedNamespaces.OrderBy(x => x))
+        foreach (var entityNs in usedNamespaces.Where(x => !x.StartsWith("<")).OrderBy(x => x))
             sb.AppendLine($"using {entityNs};");
         sb.AppendLine();
         sb.AppendLine($"namespace {ns}");
