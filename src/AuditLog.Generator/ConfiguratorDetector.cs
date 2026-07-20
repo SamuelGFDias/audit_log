@@ -63,6 +63,7 @@ internal static class ConfiguratorDetector
             configuredNames.Add(p.PropertyName);
 
         var pkName = DetectPrimaryKeyName(entityType);
+        var pkType = ResolveKeyType(entityType, pkName);
 
         foreach (var member in entityType.GetMembers())
         {
@@ -80,6 +81,7 @@ internal static class ConfiguratorDetector
         return new ConfiguratorInfo(
             entityNamespace, configuratorNamespace, configuratorName,
             entityName, auditLogName,
+            pkType.fullName, pkType.simpleName,
             entityProperties.ToImmutableArray(),
             collectionConfigs.ToImmutableArray());
     }
@@ -107,5 +109,33 @@ internal static class ConfiguratorDetector
                 return prop.Name;
         }
         return null;
+    }
+
+    private static (string fullName, string simpleName) ResolveKeyType(ITypeSymbol entityType, string? pkName)
+    {
+        if (pkName is not null)
+        {
+            foreach (var member in entityType.GetMembers())
+            {
+                if (member is IPropertySymbol prop && prop.Name == pkName)
+                {
+                    var typeName = prop.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                        .Replace("global::System.Int32", "int")
+                        .Replace("global::System.Int64", "long")
+                        .Replace("global::System.String", "string")
+                        .Replace("global::System.Boolean", "bool")
+                        .Replace("global::System.Byte", "byte")
+                        .Replace("global::System.Single", "float")
+                        .Replace("global::System.Double", "double")
+                        .Replace("global::System.Decimal", "decimal")
+                        .Replace("global::System.Char", "char")
+                        .Replace("global::System.Object", "object");
+                    var simpleName = prop.Type.Name;
+                    return (typeName, simpleName);
+                }
+            }
+        }
+
+        return ("global::System.Guid", "Guid");
     }
 }

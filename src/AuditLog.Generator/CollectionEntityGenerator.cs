@@ -19,9 +19,9 @@ internal static class CollectionEntityGenerator
         sb.AppendLine("    {");
         sb.AppendLine("        public long Id { get; set; }");
         sb.AppendLine();
-        sb.AppendLine($"        public global::System.Guid {col.ParentKey} {{ get; set; }}");
+        sb.AppendLine($"        public {col.ParentKeyType} {col.ParentKey} {{ get; set; }}");
         sb.AppendLine();
-        sb.AppendLine($"        public global::System.Guid {col.ChildKey} {{ get; set; }}");
+        sb.AppendLine($"        public {col.ChildKeyType} {col.ChildKey} {{ get; set; }}");
         sb.AppendLine();
         sb.AppendLine("        public AuditLog.Abstractions.AuditOperation Operacao { get; set; }");
         sb.AppendLine();

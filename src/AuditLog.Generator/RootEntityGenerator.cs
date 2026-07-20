@@ -19,7 +19,7 @@ internal static class RootEntityGenerator
         sb.AppendLine("    {");
         sb.AppendLine("        public long Id { get; set; }");
         sb.AppendLine();
-        sb.AppendLine($"        public global::System.Guid {config.EntityName}Id {{ get; set; }}");
+        sb.AppendLine($"        public {config.EntityKeyType} {config.EntityName}Id {{ get; set; }}");
         sb.AppendLine();
         sb.AppendLine("        public AuditLog.Abstractions.AuditOperation Operacao { get; set; }");
         sb.AppendLine();

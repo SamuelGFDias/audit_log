@@ -107,6 +107,7 @@ internal static class ExpressionParser
         if (propertyName is null) return;
 
         var elementName = ResolveCollectionElementType(entityType, propertyName);
+        var elementType = ResolveCollectionElementSymbol(entityType, propertyName);
         var auditLogName = elementName + "AuditLog";
         string? parentKey = null;
         string? childKey = null;
@@ -114,10 +115,16 @@ internal static class ExpressionParser
 
         CollectForEachModifiers(fullExpression, ref parentKey, ref childKey, itemConfigs);
 
+        var resolvedParentKey = parentKey ?? elementName + "Id";
+        var resolvedChildKey = childKey ?? "Id";
+
+        var parentKeyType = ResolvePropertyTypeString(elementType, resolvedParentKey);
+        var childKeyType = ResolvePropertyTypeString(elementType, resolvedChildKey);
+
         configs.Add(new CollectionConfig(
             elementName, auditLogName,
-            parentKey ?? elementName + "Id",
-            childKey ?? "Id",
+            resolvedParentKey, resolvedChildKey,
+            parentKeyType, childKeyType,
             itemConfigs.ToImmutableArray()));
     }
 
@@ -292,5 +299,51 @@ internal static class ExpressionParser
         }
 
         return propertyName;
+    }
+
+    private static ITypeSymbol? ResolveCollectionElementSymbol(ITypeSymbol entityType, string propertyName)
+    {
+        foreach (var member in entityType.GetMembers())
+        {
+            if (member.Name != propertyName) continue;
+
+            INamedTypeSymbol? named = member switch
+            {
+                IPropertySymbol p => p.Type as INamedTypeSymbol,
+                IFieldSymbol f => f.Type as INamedTypeSymbol,
+                _ => null
+            };
+
+            if (named is not null && named.IsGenericType && named.TypeArguments.Length > 0)
+                return named.TypeArguments[0];
+        }
+
+        return null;
+    }
+
+    private static string ResolvePropertyTypeString(ITypeSymbol? type, string propertyName)
+    {
+        if (type is null) return "global::System.Guid";
+
+        foreach (var member in type.GetMembers())
+        {
+            if (member is IPropertySymbol prop && prop.Name == propertyName)
+            {
+                var typeStr = prop.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    .Replace("global::System.Int32", "int")
+                    .Replace("global::System.Int64", "long")
+                    .Replace("global::System.String", "string")
+                    .Replace("global::System.Boolean", "bool")
+                    .Replace("global::System.Byte", "byte")
+                    .Replace("global::System.Single", "float")
+                    .Replace("global::System.Double", "double")
+                    .Replace("global::System.Decimal", "decimal")
+                    .Replace("global::System.Char", "char")
+                    .Replace("global::System.Object", "object");
+                return typeStr;
+            }
+        }
+
+        return "global::System.Guid";
     }
 }

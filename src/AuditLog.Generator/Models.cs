@@ -38,17 +38,22 @@ internal sealed class CollectionConfig
     public string AuditLogName { get; }
     public string ParentKey { get; }
     public string ChildKey { get; }
+    public string ParentKeyType { get; }
+    public string ChildKeyType { get; }
     public ImmutableArray<PropertyConfig> ItemConfigs { get; }
 
     public CollectionConfig(
         string elementName, string auditLogName,
         string parentKey, string childKey,
+        string parentKeyType, string childKeyType,
         ImmutableArray<PropertyConfig> itemConfigs)
     {
         ElementName = elementName;
         AuditLogName = auditLogName;
         ParentKey = parentKey;
         ChildKey = childKey;
+        ParentKeyType = parentKeyType;
+        ChildKeyType = childKeyType;
         ItemConfigs = itemConfigs;
     }
 }
@@ -60,13 +65,16 @@ internal sealed class ConfiguratorInfo
     public string ConfiguratorName { get; }
     public string EntityName { get; }
     public string AuditLogName { get; }
+    public string EntityKeyType { get; }
+    public string EntityKeyTypeName { get; }
     public ImmutableArray<PropertyConfig> Properties { get; }
     public ImmutableArray<CollectionConfig> Collections { get; }
 
     public ConfiguratorInfo(
         string entityNamespace, string configuratorNamespace,
         string configuratorName, string entityName,
-        string auditLogName, ImmutableArray<PropertyConfig> properties,
+        string auditLogName, string entityKeyType, string entityKeyTypeName,
+        ImmutableArray<PropertyConfig> properties,
         ImmutableArray<CollectionConfig> collections)
     {
         EntityNamespace = entityNamespace;
@@ -74,6 +82,8 @@ internal sealed class ConfiguratorInfo
         ConfiguratorName = configuratorName;
         EntityName = entityName;
         AuditLogName = auditLogName;
+        EntityKeyType = entityKeyType;
+        EntityKeyTypeName = entityKeyTypeName;
         Properties = properties;
         Collections = collections;
     }
