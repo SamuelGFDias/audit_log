@@ -33,8 +33,8 @@ internal static class ConfiguratorDetector
         var entityName = entityType.Name;
         var entityNamespace = entityType.ContainingNamespace?.ToDisplayString() ?? "";
 
-        if (string.IsNullOrWhiteSpace(entityNamespace) || entityNamespace.StartsWith("<"))
-            return null;
+        if (entityNamespace.StartsWith("<"))
+            entityNamespace = "";
         
         var configuratorNamespace = typeSymbol.ContainingNamespace.ToDisplayString();
         var configuratorName = typeSymbol.Name;

@@ -107,7 +107,7 @@ internal static class CollectionEntityGenerator
         sb.AppendLine("using AuditLog.Abstractions;");
         sb.AppendLine("using Microsoft.EntityFrameworkCore;");
         sb.AppendLine("using Microsoft.EntityFrameworkCore.ChangeTracking;");
-        if (!parentConfig.EntityNamespace.StartsWith("<"))
+        if (!string.IsNullOrWhiteSpace(parentConfig.EntityNamespace) && !parentConfig.EntityNamespace.StartsWith("<"))
             sb.AppendLine($"using {parentConfig.EntityNamespace};");
         sb.AppendLine();
         sb.AppendLine($"namespace {ns}");

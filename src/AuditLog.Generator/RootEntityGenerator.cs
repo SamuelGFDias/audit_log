@@ -106,7 +106,8 @@ internal static class RootEntityGenerator
         sb.AppendLine("using Microsoft.EntityFrameworkCore;");
         sb.AppendLine("using Microsoft.EntityFrameworkCore.ChangeTracking;");
         sb.AppendLine();
-        sb.AppendLine($"using {config.EntityNamespace};");
+        if (!string.IsNullOrWhiteSpace(config.EntityNamespace))
+            sb.AppendLine($"using {config.EntityNamespace};");
         sb.AppendLine();
         sb.AppendLine();
         sb.AppendLine($"namespace {ns}");
