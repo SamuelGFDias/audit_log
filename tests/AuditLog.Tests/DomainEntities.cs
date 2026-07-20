@@ -1,3 +1,5 @@
+namespace AuditLog.Tests;
+
 public sealed class Paciente
 {
     public Guid Id { get; set; }

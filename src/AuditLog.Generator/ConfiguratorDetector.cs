@@ -3,20 +3,17 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 
 namespace AuditLog.Generator;
 
 internal static class ConfiguratorDetector
 {
-    public const string GenerateAuditLogAttribute = "AuditLog.Abstractions.GenerateAuditLogAttribute";
+    private const string GenerateAuditLogAttribute = "AuditLog.Abstractions.GenerateAuditLogAttribute";
 
     public static bool IsCandidate(SyntaxNode node)
     {
-        return node is ClassDeclarationSyntax cds &&
-               cds.AttributeLists.Count > 0 &&
-               cds.BaseList is not null;
+        return node is ClassDeclarationSyntax { AttributeLists.Count: > 0, BaseList: not null };
     }
 
     public static ConfiguratorInfo? GetSemanticTarget(GeneratorSyntaxContext context)
@@ -34,7 +31,11 @@ internal static class ConfiguratorDetector
 
         var entityType = baseType.TypeArguments[0];
         var entityName = entityType.Name;
-        var entityNamespace = entityType.ContainingNamespace.ToDisplayString();
+        var entityNamespace = entityType.ContainingNamespace?.ToDisplayString() ?? "";
+
+        if (string.IsNullOrWhiteSpace(entityNamespace) || entityNamespace.StartsWith("<"))
+            return null;
+        
         var configuratorNamespace = typeSymbol.ContainingNamespace.ToDisplayString();
         var configuratorName = typeSymbol.Name;
         var auditLogName = entityName + "AuditLog";
@@ -79,11 +80,14 @@ internal static class ConfiguratorDetector
         }
 
         return new ConfiguratorInfo(
-            entityNamespace, configuratorNamespace, configuratorName,
-            entityName, auditLogName,
+            entityNamespace,
+            configuratorNamespace,
+            configuratorName,
+            entityName, 
+            auditLogName,
             pkType.fullName, pkType.simpleName,
-            entityProperties.ToImmutableArray(),
-            collectionConfigs.ToImmutableArray());
+            [..entityProperties],
+            [..collectionConfigs]);
     }
 
     private static bool IsSimpleScalarType(ITypeSymbol type)
@@ -108,6 +112,7 @@ internal static class ConfiguratorDetector
             if (prop.Name == "Id" || prop.Name == entityName + "Id")
                 return prop.Name;
         }
+
         return null;
     }
 

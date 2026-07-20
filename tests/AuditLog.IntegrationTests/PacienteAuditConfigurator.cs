@@ -1,4 +1,5 @@
 using AuditLog.Abstractions;
+using AuditLog.IntegrationTests;
 
 [GenerateAuditLog]
 public sealed partial class PacienteAuditConfigurator

@@ -1,4 +1,5 @@
 using AuditLog.Abstractions;
+using AuditLog.Tests;
 
 [GenerateAuditLog]
 public sealed partial class NotificacaoAuditConfigurator
