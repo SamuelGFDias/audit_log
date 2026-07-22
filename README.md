@@ -167,3 +167,7 @@ db.Pacientes.IgnoreQueryFilters().ToList();
 ### Suporte a herança indireta de `IEntityTypeConfiguration<T>`
 
 O gerador detecta entity maps que implementam `IEntityTypeConfiguration<T>` através de toda a cadeia de herança, incluindo casos como `AuditEntityMap<T>` → `IContextEntityMap<T>` → `IEntityTypeConfiguration<T>`. Isso funciona tanto com `ApplyConfiguration(new ConcreteEntityMap())` quanto com `ApplyConfigurationsFromAssembly()`.
+
+### Descoberta de entidades sem `DbSet<T>`
+
+O gerador descobre entidades mesmo quando o DbContext não possui propriedades `DbSet<T>`, desde que as entidades sejam registradas via `modelBuilder.Entity<T>()` no `OnModelCreating` ou via `ApplyConfiguration`/`ApplyConfigurationsFromAssembly` com entity maps que implementam `IEntityTypeConfiguration<T>`.

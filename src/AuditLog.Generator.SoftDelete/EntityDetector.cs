@@ -36,32 +36,25 @@ internal static class EntityDetector
         var baseType = typeSymbol.BaseType;
         if (baseType is null || baseType.Name != "DbContext") return (null, ImmutableArray<RelationshipConfig>.Empty);
 
-        var entities = new List<EntityInfo>();
-        var entityLookup = new Dictionary<string, (ITypeSymbol type, string fullName)>();
+        var compilation = context.SemanticModel.Compilation;
+        var entityTypesFromDbSet = DiscoverEntitiesFromDbSets(typeSymbol);
 
-        foreach (var member in typeSymbol.GetMembers())
+        List<EntityInfo> entities;
+        Dictionary<string, (ITypeSymbol type, string fullName)> entityLookup;
+
+        if (entityTypesFromDbSet.Count > 0)
         {
-            if (member is not IPropertySymbol prop) continue;
-            if (prop.Type is not INamedTypeSymbol { Name: "DbSet", IsGenericType: true } dbSet) continue;
-            if (dbSet.TypeArguments.Length == 0) continue;
-
-            var entityType = dbSet.TypeArguments[0];
-            if (entityType is INamedTypeSymbol entityNamed)
-            {
-                var info = AnalyzeEntity(entityType);
-                if (info is not null)
-                {
-                    entities.Add(info);
-                    entityLookup[info.Name] = (entityType, info.FullName);
-                }
-            }
+            entities = entityTypesFromDbSet.Select(e => AnalyzeEntity(e.type)!).Where(e => e is not null).ToList()!;
+            entityLookup = entityTypesFromDbSet.ToDictionary(e => e.type.Name, e => e);
+        }
+        else
+        {
+            (entities, entityLookup) = DiscoverEntitiesFromOnModelCreating(classDecl, compilation);
         }
 
         if (entities.Count == 0) return (null, ImmutableArray<RelationshipConfig>.Empty);
 
         var relationships = FluentApiParser.ParseOnModelCreating(classDecl, typeSymbol, entities.ToImmutableArray(), context);
-
-        var entityMap = entities.ToDictionary(e => e.Name, e => e);
 
         var updatedEntities = entities.Select(e =>
         {
@@ -93,6 +86,124 @@ internal static class EntityDetector
             updatedEntities);
 
         return (dbContext, relationships);
+    }
+
+    private static List<(ITypeSymbol type, string fullName)> DiscoverEntitiesFromDbSets(INamedTypeSymbol typeSymbol)
+    {
+        var result = new List<(ITypeSymbol type, string fullName)>();
+        foreach (var member in typeSymbol.GetMembers())
+        {
+            if (member is not IPropertySymbol prop) continue;
+            if (prop.Type is not INamedTypeSymbol { Name: "DbSet", IsGenericType: true } dbSet) continue;
+            if (dbSet.TypeArguments.Length == 0) continue;
+
+            var entityType = dbSet.TypeArguments[0];
+            if (entityType is INamedTypeSymbol)
+            {
+                result.Add((entityType, entityType.ToDisplayString()));
+            }
+        }
+        return result;
+    }
+
+    private static (List<EntityInfo> entities, Dictionary<string, (ITypeSymbol type, string fullName)> entityLookup)
+        DiscoverEntitiesFromOnModelCreating(ClassDeclarationSyntax classDecl, Compilation compilation)
+    {
+        var onModelCreating = classDecl.Members
+            .OfType<MethodDeclarationSyntax>()
+            .FirstOrDefault(m => m.Identifier.Text == "OnModelCreating");
+
+        if (onModelCreating?.Body is null)
+            return (new List<EntityInfo>(), new Dictionary<string, (ITypeSymbol type, string fullName)>());
+
+        var seen = new HashSet<string>();
+        var symbols = new List<ITypeSymbol>();
+        var entityLookup = new Dictionary<string, (ITypeSymbol type, string fullName)>();
+        var classSemanticModel = compilation.GetSemanticModel(classDecl.SyntaxTree);
+
+        foreach (var statement in onModelCreating.Body.Statements)
+        {
+            if (statement is not ExpressionStatementSyntax exprStmt) continue;
+            if (exprStmt.Expression is not InvocationExpressionSyntax invocation) continue;
+            if (invocation.Expression is not MemberAccessExpressionSyntax ma) continue;
+
+            if (ma.Name is GenericNameSyntax { Identifier: { Text: "Entity" } } genericName)
+            {
+                var entityName = genericName.TypeArgumentList.Arguments.FirstOrDefault()?.ToString();
+                if (entityName is null) continue;
+                var typeInfo = classSemanticModel.GetTypeInfo(genericName.TypeArgumentList.Arguments[0]);
+                var typeSymbol = typeInfo.Type;
+                if (typeSymbol is not null && seen.Add(typeSymbol.ToDisplayString()))
+                {
+                    symbols.Add(typeSymbol);
+                    entityLookup[typeSymbol.Name] = (typeSymbol, typeSymbol.ToDisplayString());
+                }
+            }
+            else if (ma.Name.Identifier.Text == "ApplyConfiguration")
+            {
+                var arg = invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression;
+                if (arg is not ObjectCreationExpressionSyntax creation) continue;
+                var mapTypeName = creation.Type.ToString();
+                var mapClass = FindClassDeclaration(compilation, mapTypeName);
+                if (mapClass is null) continue;
+                var mapSemanticModel = compilation.GetSemanticModel(mapClass.SyntaxTree);
+                var entityTypeSymbol = FluentApiParser.ExtractEntityTypeFromSemanticModel(mapClass, mapSemanticModel);
+                if (entityTypeSymbol is null) continue;
+                var key = entityTypeSymbol.ToDisplayString();
+                if (seen.Add(key))
+                {
+                    symbols.Add(entityTypeSymbol);
+                    entityLookup[entityTypeSymbol.Name] = (entityTypeSymbol, key);
+                }
+            }
+            else if (ma.Name.Identifier.Text == "ApplyConfigurationsFromAssembly")
+            {
+                foreach (var tree in compilation.SyntaxTrees)
+                {
+                    var root = tree.GetRoot();
+                    var classes = root.DescendantNodes().OfType<ClassDeclarationSyntax>();
+                    var treeSemanticModel = compilation.GetSemanticModel(tree);
+
+                    foreach (var cls in classes)
+                    {
+                        var entityTypeSymbol = FluentApiParser.ExtractEntityTypeFromSemanticModel(cls, treeSemanticModel);
+                        if (entityTypeSymbol is null) continue;
+                        var key = entityTypeSymbol.ToDisplayString();
+                        if (!seen.Add(key)) continue;
+                        symbols.Add(entityTypeSymbol);
+                        entityLookup[entityTypeSymbol.Name] = (entityTypeSymbol, key);
+                    }
+                }
+            }
+        }
+
+        var entities = symbols.Select(s => AnalyzeEntity(s))
+            .Where(e => e is not null)
+            .Cast<EntityInfo>()
+            .ToList();
+
+        return (entities, entityLookup);
+    }
+
+    private static ClassDeclarationSyntax? FindClassDeclaration(Compilation compilation, string className)
+    {
+        foreach (var tree in compilation.SyntaxTrees)
+        {
+            var root = tree.GetRoot();
+            var found = root.DescendantNodes()
+                .OfType<ClassDeclarationSyntax>()
+                .FirstOrDefault(c => c.Identifier.Text == className);
+
+            if (found is not null)
+            {
+                var semanticModel = compilation.GetSemanticModel(tree);
+                var symbol = semanticModel.GetDeclaredSymbol(found);
+                if (symbol?.ToDisplayString() == className || symbol?.ToDisplayString().EndsWith("." + className) == true)
+                    return found;
+                return found;
+            }
+        }
+        return null;
     }
 
     public static EntityInfo? AnalyzeEntity(ITypeSymbol typeSymbol)

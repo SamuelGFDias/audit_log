@@ -108,14 +108,15 @@ internal static class FluentApiParser
 
         var tree = mapClass.SyntaxTree;
         var semanticModel = compilation.GetSemanticModel(tree);
-        var entityTypeArg = ExtractEntityTypeFromSemanticModel(mapClass, semanticModel);
-        if (entityTypeArg is null)
+        var entityTypeSymbol = ExtractEntityTypeFromSemanticModel(mapClass, semanticModel);
+        var entityName = entityTypeSymbol?.Name;
+        if (entityName is null)
         {
-            entityTypeArg = ResolveEntityFromMapName(mapTypeName);
-            if (entityTypeArg is null) return;
+            entityName = ResolveEntityFromMapName(mapTypeName);
+            if (entityName is null) return;
         }
 
-        ParseEntityMapConfigure(mapClass, entityTypeArg, compilation, entities, entitySymbols, configs);
+        ParseEntityMapConfigure(mapClass, entityName, compilation, entities, entitySymbols, configs);
     }
 
     private static void ParseApplyConfigurationsFromAssembly(
@@ -136,15 +137,15 @@ internal static class FluentApiParser
             {
                 var entityTypeArg = ExtractEntityTypeFromSemanticModel(cls, semanticModel);
                 if (entityTypeArg is null) continue;
-                if (!seenEntity.Add(entityTypeArg)) continue;
+                if (!seenEntity.Add(entityTypeArg.Name)) continue;
 
-                var entityName = entityTypeArg.ToString();
+                var entityName = entityTypeArg.Name.ToString();
                 ParseEntityMapConfigure(cls, entityName, compilation, entities, entitySymbols, configs);
             }
         }
     }
 
-    private static string? ExtractEntityTypeFromSemanticModel(
+    internal static ITypeSymbol? ExtractEntityTypeFromSemanticModel(
         ClassDeclarationSyntax cls, SemanticModel semanticModel)
     {
         var symbol = semanticModel.GetDeclaredSymbol(cls) as INamedTypeSymbol;
@@ -159,7 +160,7 @@ internal static class FluentApiParser
                 } named &&
                 named.TypeArguments.Length == 1)
             {
-                return named.TypeArguments[0].Name;
+                return named.TypeArguments[0];
             }
         }
 
