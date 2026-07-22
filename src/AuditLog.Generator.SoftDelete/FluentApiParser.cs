@@ -239,6 +239,7 @@ internal static class FluentApiParser
         if (hasOneOrMany is null) return configs;
 
         var navProperty = ExtractPropertyFromLambda(hasOneOrMany.Arg);
+        var hasOne = hasOneOrMany.Method == "HasOne";
 
         var withOneOrMany = chain.FirstOrDefault(c => c.Method is "WithOne" or "WithMany");
         var fkCall = chain.FirstOrDefault(c => c.Method == "HasForeignKey");
@@ -255,10 +256,58 @@ internal static class FluentApiParser
             return configs;
         }
 
-        var fkName = fkCall is not null
+        var rawFkName = fkCall is not null
             ? ExtractPropertyFromLambda(fkCall.Arg) ?? principalEntity + "Id"
             : principalEntity + "Id";
 
+        // For HasOne, the FK is on the current entity (which is the dependent).
+        // The principal is the navigation target.
+        // For HasMany.WithOne, the FK is on the WithOne entity (the dependent).
+        // The principal is the current entity.
+        if (hasOne)
+        {
+            var resolvedPrincipal = ResolveDependentEntityName(
+                principalEntity, navProperty ?? "", rawFkName, entities, entitySymbols);
+
+            if (string.IsNullOrEmpty(resolvedPrincipal) || resolvedPrincipal == principalEntity)
+                return configs;
+
+            var hFkNullable = false;
+            var hFkType = "global::System.Guid";
+            if (entitySymbols.TryGetValue(principalEntity, out var hDepInfo))
+            {
+                hFkNullable = hDepInfo.PrimaryKeyType.Contains("?");
+                hFkType = hDepInfo.PrimaryKeyType;
+            }
+
+            var hBehavior = OnDeleteBehavior(chain);
+            var hDepIsSoftDelete = entitySymbols.TryGetValue(principalEntity, out var hDepSym) && hDepSym.IsSoftDelete;
+            var hDepFullName = entitySymbols.TryGetValue(principalEntity, out var hDep)
+                ? hDep.FullName
+                : principalEntity;
+            var hPkName = entitySymbols.TryGetValue(resolvedPrincipal, out var hPrincipalSym)
+                ? hPrincipalSym.PrimaryKeyName
+                : "Id";
+
+            configs.Add(new RelationshipConfig
+            {
+                PrincipalEntity = resolvedPrincipal,
+                NavigationProperty = navProperty ?? "",
+                DependentEntityFullName = hDepFullName,
+                DependentEntityName = principalEntity,
+                FkPropertyName = rawFkName,
+                FkPropertyType = hFkType,
+                FkIsNullable = hFkNullable,
+                PrincipalKeyName = hPkName,
+                DeleteBehavior = hBehavior,
+                IsOwnership = false,
+                DependentIsSoftDelete = hDepIsSoftDelete
+            });
+
+            return configs;
+        }
+
+        var fkName = rawFkName;
         var dependentEntityName = ResolveDependentEntityName(
             principalEntity, navProperty ?? "", fkName, entities, entitySymbols);
 
