@@ -63,6 +63,7 @@ internal static class EntityDetector
                 .Select(r => new RelationshipInfo(
                     r.DependentEntityFullName,
                     r.DependentEntityName,
+                    r.DependentPkName,
                     r.FkPropertyName,
                     r.FkPropertyType,
                     e.PrimaryKeyName,

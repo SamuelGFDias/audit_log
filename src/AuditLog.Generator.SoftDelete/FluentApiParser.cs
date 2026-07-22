@@ -14,6 +14,7 @@ internal sealed class RelationshipConfig
     public string NavigationProperty { get; set; } = "";
     public string DependentEntityFullName { get; set; } = "";
     public string DependentEntityName { get; set; } = "";
+    public string DependentPkName { get; set; } = "Id";
     public string FkPropertyName { get; set; } = "";
     public string FkPropertyType { get; set; } = "global::System.Guid";
     public bool FkIsNullable { get; set; }
@@ -289,12 +290,18 @@ internal static class FluentApiParser
                 ? hPrincipalSym.PrimaryKeyName
                 : "Id";
 
+            var hDepName = principalEntity;
+            var hDepPkName = entitySymbols.TryGetValue(hDepName, out var hDepSymPk)
+                ? hDepSymPk.PrimaryKeyName
+                : "Id";
+
             configs.Add(new RelationshipConfig
             {
                 PrincipalEntity = resolvedPrincipal,
                 NavigationProperty = navProperty ?? "",
                 DependentEntityFullName = hDepFullName,
-                DependentEntityName = principalEntity,
+                DependentEntityName = hDepName,
+                DependentPkName = hDepPkName,
                 FkPropertyName = rawFkName,
                 FkPropertyType = hFkType,
                 FkIsNullable = hFkNullable,
@@ -335,12 +342,17 @@ internal static class FluentApiParser
             ? principalSym.PrimaryKeyName
             : "Id";
 
+        var depPkName = entitySymbols.TryGetValue(dependentEntityName, out var depSymPk)
+            ? depSymPk.PrimaryKeyName
+            : "Id";
+
         configs.Add(new RelationshipConfig
         {
             PrincipalEntity = principalEntity,
             NavigationProperty = navProperty ?? "",
             DependentEntityFullName = dependentFullName,
             DependentEntityName = dependentEntityName,
+            DependentPkName = depPkName,
             FkPropertyName = fkName,
             FkPropertyType = fkType,
             FkIsNullable = fkNullable,

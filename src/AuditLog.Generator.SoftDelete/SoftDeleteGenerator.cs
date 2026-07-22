@@ -43,6 +43,7 @@ public sealed class SoftDeleteGenerator : IIncrementalGenerator
                         .Select(r => new RelationshipInfo(
                             r.DependentEntityFullName,
                             r.DependentEntityName,
+                            r.DependentPkName,
                             r.FkPropertyName,
                             r.FkPropertyType,
                             entity.PrimaryKeyName,

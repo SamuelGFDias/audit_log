@@ -27,6 +27,7 @@ internal sealed class RelationshipInfo
 {
     public string DependentEntityFullName { get; }
     public string DependentEntityName { get; }
+    public string DependentPkName { get; }
     public string FkPropertyName { get; }
     public string FkPropertyType { get; }
     public string PrincipalKeyName { get; }
@@ -37,12 +38,14 @@ internal sealed class RelationshipInfo
 
     public RelationshipInfo(
         string dependentEntityFullName, string dependentEntityName,
+        string dependentPkName,
         string fkPropertyName, string fkPropertyType,
         string principalKeyName, bool fkIsNullable,
         string deleteBehavior, bool isOwnership, bool dependentIsSoftDelete)
     {
         DependentEntityFullName = dependentEntityFullName;
         DependentEntityName = dependentEntityName;
+        DependentPkName = dependentPkName;
         FkPropertyName = fkPropertyName;
         FkPropertyType = fkPropertyType;
         PrincipalKeyName = principalKeyName;
