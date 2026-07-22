@@ -103,13 +103,19 @@ internal static class FluentApiParser
         if (arg is not ObjectCreationExpressionSyntax creation) return;
 
         var mapTypeName = creation.Type.ToString();
-        var entityName = ResolveEntityFromMapName(mapTypeName);
-        if (entityName is null) return;
-
         var mapClass = FindClassDeclaration(compilation, mapTypeName);
         if (mapClass is null) return;
 
-        ParseEntityMapConfigure(mapClass, entityName, compilation, entities, entitySymbols, configs);
+        var tree = mapClass.SyntaxTree;
+        var semanticModel = compilation.GetSemanticModel(tree);
+        var entityTypeArg = ExtractEntityTypeFromSemanticModel(mapClass, semanticModel);
+        if (entityTypeArg is null)
+        {
+            entityTypeArg = ResolveEntityFromMapName(mapTypeName);
+            if (entityTypeArg is null) return;
+        }
+
+        ParseEntityMapConfigure(mapClass, entityTypeArg, compilation, entities, entitySymbols, configs);
     }
 
     private static void ParseApplyConfigurationsFromAssembly(
@@ -118,15 +124,19 @@ internal static class FluentApiParser
         Dictionary<string, EntityInfo> entitySymbols,
         List<RelationshipConfig> configs)
     {
+        var seenEntity = new HashSet<string>();
+
         foreach (var tree in compilation.SyntaxTrees)
         {
             var root = tree.GetRoot();
             var classes = root.DescendantNodes().OfType<ClassDeclarationSyntax>();
+            var semanticModel = compilation.GetSemanticModel(tree);
 
             foreach (var cls in classes)
             {
-                var entityTypeArg = ExtractEntityTypeFromBaseListSyntax(cls);
+                var entityTypeArg = ExtractEntityTypeFromSemanticModel(cls, semanticModel);
                 if (entityTypeArg is null) continue;
+                if (!seenEntity.Add(entityTypeArg)) continue;
 
                 var entityName = entityTypeArg.ToString();
                 ParseEntityMapConfigure(cls, entityName, compilation, entities, entitySymbols, configs);
@@ -134,19 +144,25 @@ internal static class FluentApiParser
         }
     }
 
-    private static string? ExtractEntityTypeFromBaseListSyntax(ClassDeclarationSyntax cls)
+    private static string? ExtractEntityTypeFromSemanticModel(
+        ClassDeclarationSyntax cls, SemanticModel semanticModel)
     {
-        if (cls.BaseList is null) return null;
-        foreach (var baseType in cls.BaseList.Types)
+        var symbol = semanticModel.GetDeclaredSymbol(cls) as INamedTypeSymbol;
+        if (symbol is null) return null;
+
+        foreach (var iface in symbol.AllInterfaces)
         {
-            var typeStr = baseType.ToString();
-            var idx = typeStr.LastIndexOf("IEntityTypeConfiguration<", System.StringComparison.Ordinal);
-            if (idx < 0) continue;
-            var start = idx + "IEntityTypeConfiguration<".Length;
-            var end = typeStr.LastIndexOf('>');
-            if (end < 0 || end <= start) continue;
-            return typeStr.Substring(start, end - start);
+            if (iface is INamedTypeSymbol
+                {
+                    Name: "IEntityTypeConfiguration",
+                    IsGenericType: true
+                } named &&
+                named.TypeArguments.Length == 1)
+            {
+                return named.TypeArguments[0].Name;
+            }
         }
+
         return null;
     }
 

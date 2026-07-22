@@ -20,7 +20,8 @@ internal static class Helpers
         {
             if (prop.IsIgnored || prop.IsKey) continue;
             var nullable = prop.IsRequired ? "" : "?";
-            sb.AppendLine($"        public string{nullable} {prop.FullPropertyName} {{ get; set; }}");
+            var init = prop.IsRequired ? " = null!;" : "";
+            sb.AppendLine($"        public string{nullable} {prop.FullPropertyName} {{ get; set; }}{init}");
             sb.AppendLine();
         }
     }
@@ -81,7 +82,7 @@ internal static class Helpers
             if (prop.IsSensitive)
                 sb.AppendLine($"{indent}{prop.FullPropertyName} = \"***\",");
             else
-                sb.AppendLine($"{indent}{prop.FullPropertyName} = global::System.Convert.ToString({valueExpr}),");
+                sb.AppendLine($"{indent}{prop.FullPropertyName} = global::System.Convert.ToString({valueExpr}) ?? string.Empty,");
         }
     }
 
