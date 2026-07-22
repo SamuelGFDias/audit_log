@@ -267,8 +267,21 @@ internal static class FluentApiParser
         // The principal is the current entity.
         if (hasOne)
         {
-            var resolvedPrincipal = ResolveDependentEntityName(
-                principalEntity, navProperty ?? "", rawFkName, entities, entitySymbols);
+            // HasOne<T>() without lambda: use generic type argument
+            var hasOneGeneric = string.IsNullOrEmpty(navProperty) && !string.IsNullOrEmpty(hasOneOrMany.GenericTypeArg)
+                ? hasOneOrMany.GenericTypeArg
+                : null;
+
+            string resolvedPrincipal;
+            if (hasOneGeneric is not null)
+            {
+                resolvedPrincipal = hasOneGeneric;
+            }
+            else
+            {
+                resolvedPrincipal = ResolveDependentEntityName(
+                    principalEntity, navProperty ?? "", rawFkName, entities, entitySymbols);
+            }
 
             if (string.IsNullOrEmpty(resolvedPrincipal) || resolvedPrincipal == principalEntity)
                 return configs;
@@ -471,7 +484,14 @@ internal static class FluentApiParser
                 ? current.ArgumentList.Arguments[0].Expression
                 : null;
 
-            calls.Add(new MethodCallInfo(methodName, firstArg));
+            var genericTypeArg = current.Expression is MemberAccessExpressionSyntax
+                {
+                    Name: GenericNameSyntax generic
+                } && generic.TypeArgumentList.Arguments.Count == 1
+                ? generic.TypeArgumentList.Arguments[0].ToString()
+                : null;
+
+            calls.Add(new MethodCallInfo(methodName, firstArg, genericTypeArg));
 
             if (current.Expression is MemberAccessExpressionSyntax { Expression: InvocationExpressionSyntax inner })
             {
@@ -491,11 +511,13 @@ internal static class FluentApiParser
     {
         public string Method { get; }
         public ExpressionSyntax? Arg { get; }
+        public string? GenericTypeArg { get; }
 
-        public MethodCallInfo(string method, ExpressionSyntax? arg)
+        public MethodCallInfo(string method, ExpressionSyntax? arg, string? genericTypeArg = null)
         {
             Method = method;
             Arg = arg;
+            GenericTypeArg = genericTypeArg;
         }
     }
 }
