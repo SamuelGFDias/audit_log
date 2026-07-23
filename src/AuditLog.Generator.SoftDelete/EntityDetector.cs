@@ -37,19 +37,19 @@ internal static class EntityDetector
         if (baseType is null || baseType.Name != "DbContext") return (null, ImmutableArray<RelationshipConfig>.Empty);
 
         var compilation = context.SemanticModel.Compilation;
+
+        var (entities, entityLookup) = DiscoverEntitiesFromOnModelCreating(classDecl, compilation);
+
         var entityTypesFromDbSet = DiscoverEntitiesFromDbSets(typeSymbol);
-
-        List<EntityInfo> entities;
-        Dictionary<string, (ITypeSymbol type, string fullName)> entityLookup;
-
-        if (entityTypesFromDbSet.Count > 0)
+        foreach (var (type, fullName) in entityTypesFromDbSet)
         {
-            entities = entityTypesFromDbSet.Select(e => AnalyzeEntity(e.type)!).Where(e => e is not null).ToList()!;
-            entityLookup = entityTypesFromDbSet.ToDictionary(e => e.type.Name, e => e);
-        }
-        else
-        {
-            (entities, entityLookup) = DiscoverEntitiesFromOnModelCreating(classDecl, compilation);
+            if (!entityLookup.ContainsKey(type.Name))
+            {
+                entityLookup[type.Name] = (type, fullName);
+                var analyzed = AnalyzeEntity(type);
+                if (analyzed is not null)
+                    entities.Add(analyzed);
+            }
         }
 
         if (entities.Count == 0) return (null, ImmutableArray<RelationshipConfig>.Empty);
