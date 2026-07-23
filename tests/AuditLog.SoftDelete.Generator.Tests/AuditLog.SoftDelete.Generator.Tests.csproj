@@ -28,4 +28,8 @@
     <ProjectReference Include="..\..\src\AuditLog.Generator.SoftDelete\AuditLog.Generator.SoftDelete.csproj" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\AuditLog.TestContainers.Shared\MsSqlContainerFixture.cs" />
+  </ItemGroup>
+
 </Project>

@@ -21,7 +21,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\AuditLog.Abstractions\AuditLog.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\AuditLog.EntityFrameworkCore\AuditLog.EntityFrameworkCore.csproj" />
-    <ProjectReference Include="..\AuditLog.TestContainers.Shared\AuditLog.TestContainers.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\AuditLog.TestContainers.Shared\MsSqlContainerFixture.cs" />
   </ItemGroup>
 
   <ItemGroup>
