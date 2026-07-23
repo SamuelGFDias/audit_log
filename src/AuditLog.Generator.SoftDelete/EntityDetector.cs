@@ -54,7 +54,7 @@ internal static class EntityDetector
 
         if (entities.Count == 0) return (null, ImmutableArray<RelationshipConfig>.Empty);
 
-        var relationships = FluentApiParser.ParseOnModelCreating(classDecl, typeSymbol, entities.ToImmutableArray(), context);
+        var relationships = FluentApiParser.ParseOnModelCreating(classDecl, typeSymbol, entities.ToImmutableArray(), entityLookup, context);
 
         var updatedEntities = entities.Select(e =>
         {

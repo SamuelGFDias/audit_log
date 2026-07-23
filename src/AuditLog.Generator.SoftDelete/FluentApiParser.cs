@@ -30,6 +30,7 @@ internal static class FluentApiParser
         ClassDeclarationSyntax classDecl,
         INamedTypeSymbol dbContextSymbol,
         ImmutableArray<EntityInfo> entities,
+        Dictionary<string, (ITypeSymbol type, string fullName)> entityLookup,
         GeneratorSyntaxContext context)
     {
         var onModelCreating = classDecl.Members
@@ -52,15 +53,15 @@ internal static class FluentApiParser
             {
                 if (ma.Name is GenericNameSyntax { Identifier: { Text: "Entity" } } genericName)
                 {
-                    ParseEntityInline(invocation, genericName, entities, entitySymbols, configs);
+                    ParseEntityInline(invocation, genericName, entities, entitySymbols, entityLookup, configs);
                 }
                 else if (ma.Name.Identifier.Text == "ApplyConfiguration")
                 {
-                    ParseApplyConfiguration(invocation, compilation, entities, entitySymbols, configs);
+                    ParseApplyConfiguration(invocation, compilation, entities, entitySymbols, entityLookup, configs);
                 }
                 else if (ma.Name.Identifier.Text == "ApplyConfigurationsFromAssembly")
                 {
-                    ParseApplyConfigurationsFromAssembly(compilation, entities, entitySymbols, configs);
+                    ParseApplyConfigurationsFromAssembly(compilation, entities, entitySymbols, entityLookup, configs);
                 }
             }
         }
@@ -73,6 +74,7 @@ internal static class FluentApiParser
         GenericNameSyntax genericName,
         ImmutableArray<EntityInfo> entities,
         Dictionary<string, EntityInfo> entitySymbols,
+        Dictionary<string, (ITypeSymbol type, string fullName)> entityLookup,
         List<RelationshipConfig> configs)
     {
         var entityName = genericName.TypeArgumentList.Arguments.FirstOrDefault()?.ToString();
@@ -87,7 +89,7 @@ internal static class FluentApiParser
             {
                 if (innerStmt is not ExpressionStatementSyntax innerExpr) continue;
                 var configsFromChain = ParseRelationshipChain(
-                    innerExpr.Expression, entityName, entities, entitySymbols);
+                    innerExpr.Expression, entityName, entities, entitySymbols, entityLookup);
                 configs.AddRange(configsFromChain);
             }
         }
@@ -98,6 +100,7 @@ internal static class FluentApiParser
         Compilation compilation,
         ImmutableArray<EntityInfo> entities,
         Dictionary<string, EntityInfo> entitySymbols,
+        Dictionary<string, (ITypeSymbol type, string fullName)> entityLookup,
         List<RelationshipConfig> configs)
     {
         var arg = invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression;
@@ -117,13 +120,14 @@ internal static class FluentApiParser
             if (entityName is null) return;
         }
 
-        ParseEntityMapConfigure(mapClass, entityName, compilation, entities, entitySymbols, configs);
+        ParseEntityMapConfigure(mapClass, entityName, compilation, entities, entitySymbols, entityLookup, configs);
     }
 
     private static void ParseApplyConfigurationsFromAssembly(
         Compilation compilation,
         ImmutableArray<EntityInfo> entities,
         Dictionary<string, EntityInfo> entitySymbols,
+        Dictionary<string, (ITypeSymbol type, string fullName)> entityLookup,
         List<RelationshipConfig> configs)
     {
         var seenEntity = new HashSet<string>();
@@ -141,7 +145,7 @@ internal static class FluentApiParser
                 if (!seenEntity.Add(entityTypeArg.Name)) continue;
 
                 var entityName = entityTypeArg.Name.ToString();
-                ParseEntityMapConfigure(cls, entityName, compilation, entities, entitySymbols, configs);
+                ParseEntityMapConfigure(cls, entityName, compilation, entities, entitySymbols, entityLookup, configs);
             }
         }
     }
@@ -174,6 +178,7 @@ internal static class FluentApiParser
         Compilation compilation,
         ImmutableArray<EntityInfo> entities,
         Dictionary<string, EntityInfo> entitySymbols,
+        Dictionary<string, (ITypeSymbol type, string fullName)> entityLookup,
         List<RelationshipConfig> configs)
     {
         var configureMethod = mapClass.Members
@@ -186,7 +191,7 @@ internal static class FluentApiParser
         {
             if (stmt is not ExpressionStatementSyntax exprStmt) continue;
             var configsFromChain = ParseRelationshipChain(
-                exprStmt.Expression, entityName, entities, entitySymbols);
+                exprStmt.Expression, entityName, entities, entitySymbols, entityLookup);
             configs.AddRange(configsFromChain);
         }
     }
@@ -228,7 +233,8 @@ internal static class FluentApiParser
         ExpressionSyntax expression,
         string principalEntity,
         ImmutableArray<EntityInfo> entities,
-        Dictionary<string, EntityInfo> entitySymbols)
+        Dictionary<string, EntityInfo> entitySymbols,
+        Dictionary<string, (ITypeSymbol type, string fullName)> entityLookup)
     {
         var configs = new List<RelationshipConfig>();
 
@@ -288,10 +294,16 @@ internal static class FluentApiParser
 
             var hFkNullable = false;
             var hFkType = "global::System.Guid";
-            if (entitySymbols.TryGetValue(principalEntity, out var hDepInfo))
+            if (entityLookup.TryGetValue(principalEntity, out var hPrincipalTypeInfo))
             {
-                hFkNullable = hDepInfo.PrimaryKeyType.Contains("?");
-                hFkType = hDepInfo.PrimaryKeyType;
+                var fkProp = hPrincipalTypeInfo.type.GetMembers()
+                    .OfType<IPropertySymbol>()
+                    .FirstOrDefault(p => p.Name == rawFkName);
+                if (fkProp is not null)
+                {
+                    hFkType = EntityDetector.GetFullyQualifiedTypeName(fkProp.Type);
+                    hFkNullable = fkProp.NullableAnnotation == NullableAnnotation.Annotated;
+                }
             }
 
             var hBehavior = OnDeleteBehavior(chain);
@@ -331,12 +343,21 @@ internal static class FluentApiParser
         var dependentEntityName = ResolveDependentEntityName(
             principalEntity, navProperty ?? "", fkName, entities, entitySymbols);
 
+        if (string.IsNullOrEmpty(dependentEntityName))
+            return configs;
+
         var fkNullable = false;
         var fkType = "global::System.Guid";
-        if (!string.IsNullOrEmpty(dependentEntityName) && entitySymbols.TryGetValue(dependentEntityName, out var depInfo))
+        if (entityLookup.TryGetValue(dependentEntityName, out var depTypeInfo))
         {
-            fkNullable = depInfo.PrimaryKeyType.Contains("?");
-            fkType = depInfo.PrimaryKeyType;
+            var fkProp = depTypeInfo.type.GetMembers()
+                .OfType<IPropertySymbol>()
+                .FirstOrDefault(p => p.Name == fkName);
+            if (fkProp is not null)
+            {
+                fkType = EntityDetector.GetFullyQualifiedTypeName(fkProp.Type);
+                fkNullable = fkProp.NullableAnnotation == NullableAnnotation.Annotated;
+            }
         }
 
         var behavior = OnDeleteBehavior(chain);
@@ -408,7 +429,6 @@ internal static class FluentApiParser
         if (entities.Length == 0) return "";
         var candidates = entities.Where(e => e.Name != principalEntity).ToList();
         if (candidates.Count == 0) return "";
-        if (candidates.Count == 1) return candidates[0].Name;
 
         var navSingular = navProperty.EndsWith("s") ? navProperty.Substring(0, navProperty.Length - 1) : navProperty;
 
@@ -436,7 +456,7 @@ internal static class FluentApiParser
             if (byFK is not null) return byFK.Name;
         }
 
-        return candidates[0].Name;
+        return "";
     }
 
     private static List<string> SplitPascalCase(string value)
