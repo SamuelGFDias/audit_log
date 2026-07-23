@@ -286,7 +286,7 @@ internal static class FluentApiParser
             else
             {
                 resolvedPrincipal = ResolveDependentEntityName(
-                    principalEntity, navProperty ?? "", rawFkName, entities, entitySymbols);
+                    principalEntity, navProperty ?? "", rawFkName, entities, entitySymbols, entityLookup);
             }
 
             if (string.IsNullOrEmpty(resolvedPrincipal) || resolvedPrincipal == principalEntity)
@@ -310,7 +310,7 @@ internal static class FluentApiParser
             var hDepIsSoftDelete = entitySymbols.TryGetValue(principalEntity, out var hDepSym) && hDepSym.IsSoftDelete;
             var hDepFullName = entitySymbols.TryGetValue(principalEntity, out var hDep)
                 ? hDep.FullName
-                : principalEntity;
+                : (entityLookup.TryGetValue(principalEntity, out var hDepInfo) ? hDepInfo.fullName : "");
             var hPkName = entitySymbols.TryGetValue(resolvedPrincipal, out var hPrincipalSym)
                 ? hPrincipalSym.PrimaryKeyName
                 : "Id";
@@ -341,7 +341,7 @@ internal static class FluentApiParser
 
         var fkName = rawFkName;
         var dependentEntityName = ResolveDependentEntityName(
-            principalEntity, navProperty ?? "", fkName, entities, entitySymbols);
+            principalEntity, navProperty ?? "", fkName, entities, entitySymbols, entityLookup);
 
         if (string.IsNullOrEmpty(dependentEntityName))
             return configs;
@@ -369,7 +369,7 @@ internal static class FluentApiParser
         {
             dependentFullName = entitySymbols.TryGetValue(dependentEntityName, out var dep)
                 ? dep.FullName
-                : dependentEntityName;
+                : (entityLookup.TryGetValue(dependentEntityName, out var depInfo) ? depInfo.fullName : "");
         }
 
         var pkName = entitySymbols.TryGetValue(principalEntity, out var principalSym)
@@ -424,56 +424,93 @@ internal static class FluentApiParser
 
     private static string ResolveDependentEntityName(
         string principalEntity, string navProperty, string fkName,
-        ImmutableArray<EntityInfo> entities, Dictionary<string, EntityInfo> entitySymbols)
+        ImmutableArray<EntityInfo> entities, Dictionary<string, EntityInfo> entitySymbols,
+        Dictionary<string, (ITypeSymbol type, string fullName)> entityLookup)
     {
         if (entities.Length == 0) return "";
         var candidates = entities.Where(e => e.Name != principalEntity).ToList();
         if (candidates.Count == 0) return "";
 
-        var navSingular = navProperty.EndsWith("s") ? navProperty.Substring(0, navProperty.Length - 1) : navProperty;
+        // 1. Match pelo CLR type real da navigation property via ITypeSymbol
+        //    Ex: AreaTecnica.Usuarios (List<UsuarioAreaTecnica>) -> "UsuarioAreaTecnica"
+        //    Ex: Paciente.Documentos (List<PacienteDocumento>)     -> "PacienteDocumento"
+        //    Ex: Notificacao.Paciente (Paciente)                   -> "Paciente"
+        var byNavType = ResolveByNavigationType(principalEntity, navProperty, entityLookup);
+        if (byNavType is not null)
+        {
+            if (candidates.Any(e => e.Name == byNavType))
+                return byNavType;
+            if (entitySymbols.TryGetValue(byNavType, out var _))
+                return byNavType;
+        }
 
+        // 2. Match por navigation property (exact)
         var byNav = candidates.FirstOrDefault(e => e.Name == navProperty);
         if (byNav is not null) return byNav.Name;
 
-        var bySingular = candidates.FirstOrDefault(e => e.Name == navSingular);
-        if (bySingular is not null) return bySingular.Name;
+        var navSingular = navProperty.EndsWith("s")
+            ? navProperty.Substring(0, navProperty.Length - 1)
+            : navProperty;
 
-        var byContains = candidates.FirstOrDefault(e =>
-        {
-            if (e.Name.IndexOf(navSingular, System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
-            if (navSingular.IndexOf(e.Name, System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
-            var navWords = SplitPascalCase(navSingular);
-            var entWords = SplitPascalCase(e.Name);
-            return navWords.Any(nw => entWords.Any(ew =>
-                string.Equals(nw, ew, System.StringComparison.OrdinalIgnoreCase)));
-        });
-        if (byContains is not null) return byContains.Name;
+        // 3. Match por FK property ownership:
+        //    entre as entidades candidatas, qual realmente tem a FK property?
+        var byFkOwner = candidates.FirstOrDefault(e =>
+            HasFkProperty(e.Name, fkName, entityLookup));
+        if (byFkOwner is not null) return byFkOwner.Name;
 
-        var fkTarget = fkName.EndsWith("Id") ? fkName.Substring(0, fkName.Length - 2) : "";
-        if (!string.IsNullOrEmpty(fkTarget) && fkTarget != principalEntity)
+        // 4. Match por suffix: navSingular como sufixo exato
+        var bySuffix = candidates.FirstOrDefault(e => e.Name.Length > navSingular.Length
+            && e.Name.EndsWith(navSingular));
+        if (bySuffix is not null) return bySuffix.Name;
+
+        // 5. Match por FK target name (exact)
+        if (fkName.EndsWith("Id"))
         {
-            var byFK = candidates.FirstOrDefault(e => e.Name == fkTarget);
-            if (byFK is not null) return byFK.Name;
+            var fkTarget = fkName.Substring(0, fkName.Length - 2);
+            if (!string.IsNullOrEmpty(fkTarget))
+            {
+                var byFK = candidates.FirstOrDefault(e => e.Name == fkTarget);
+                if (byFK is not null) return byFK.Name;
+            }
         }
 
         return "";
     }
 
-    private static List<string> SplitPascalCase(string value)
+    private static string? ResolveByNavigationType(
+        string principalEntity, string navProperty,
+        Dictionary<string, (ITypeSymbol type, string fullName)> entityLookup)
     {
-        var words = new List<string>();
-        var start = 0;
-        for (var i = 1; i < value.Length; i++)
+        if (string.IsNullOrEmpty(navProperty) || string.IsNullOrEmpty(principalEntity))
+            return null;
+
+        if (!entityLookup.TryGetValue(principalEntity, out var principalInfo))
+            return null;
+
+        var navProp = principalInfo.type.GetMembers()
+            .OfType<IPropertySymbol>()
+            .FirstOrDefault(p => p.Name == navProperty);
+        if (navProp is null)
+            return null;
+
+        var navType = navProp.Type;
+
+        if (navType is INamedTypeSymbol { IsGenericType: true } namedType)
         {
-            if (char.IsUpper(value[i]) && !char.IsUpper(value[i - 1]))
-            {
-                words.Add(value.Substring(start, i - start));
-                start = i;
-            }
+            var typeArg = namedType.TypeArguments.FirstOrDefault();
+            if (typeArg is not null)
+                return typeArg.Name;
         }
-        if (start < value.Length)
-            words.Add(value.Substring(start));
-        return words;
+
+        return navType.Name;
+    }
+
+    private static bool HasFkProperty(string entityName, string fkName,
+        Dictionary<string, (ITypeSymbol type, string fullName)> entityLookup)
+    {
+        return entityLookup.TryGetValue(entityName, out var info)
+            && info.type.GetMembers().OfType<IPropertySymbol>()
+                .Any(p => p.Name == fkName);
     }
 
     private static string? ExtractPropertyFromLambda(ExpressionSyntax? expression)

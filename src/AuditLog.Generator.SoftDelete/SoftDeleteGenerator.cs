@@ -39,7 +39,7 @@ public sealed class SoftDeleteGenerator : IIncrementalGenerator
                 if (seenEntities.Add(entity.FullName))
                 {
                     var referencingFks = rels
-                        .Where(r => r.PrincipalEntity == entity.Name && !r.IsOwnership)
+                        .Where(r => r.PrincipalEntity == entity.Name && !r.IsOwnership && EntityDetector.FkMatchesPrincipal(r, entity.Name))
                         .Select(r => new RelationshipInfo(
                             r.DependentEntityFullName,
                             r.DependentEntityName,

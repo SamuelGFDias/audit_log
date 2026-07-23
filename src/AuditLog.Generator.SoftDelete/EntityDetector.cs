@@ -59,7 +59,7 @@ internal static class EntityDetector
         var updatedEntities = entities.Select(e =>
         {
             var referencingFks = relationships
-                .Where(r => r.PrincipalEntity == e.Name && !r.IsOwnership)
+                .Where(r => r.PrincipalEntity == e.Name && !r.IsOwnership && FkMatchesPrincipal(r, e.Name))
                 .Select(r => new RelationshipInfo(
                     r.DependentEntityFullName,
                     r.DependentEntityName,
@@ -242,5 +242,13 @@ internal static class EntityDetector
         if (name == "bool" || name == "System.Boolean") return "bool";
         if (name == "DateTime" || name == "System.DateTime") return "global::System.DateTime";
         return name;
+    }
+
+    internal static bool FkMatchesPrincipal(RelationshipConfig r, string principalName)
+    {
+        if (r.FkPropertyName == principalName) return true;
+        if (r.FkPropertyName == principalName + "Id") return true;
+        if (r.FkPropertyName.StartsWith(principalName + "_")) return true;
+        return false;
     }
 }
