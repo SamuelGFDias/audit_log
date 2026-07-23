@@ -1,21 +1,14 @@
 using AuditLog.EntityFrameworkCore.SoftDelete;
+using AuditLog.TestContainers.Shared;
 using Microsoft.EntityFrameworkCore;
-using Testcontainers.MsSql;
 using Xunit;
 
 namespace AuditLog.SoftDelete.Reflection.Tests;
 
-public sealed class SoftDeleteReflectionTests : IAsyncLifetime
+public sealed class SoftDeleteReflectionTests
 {
-    private readonly MsSqlContainer _container = new MsSqlBuilder()
-        .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
-        .Build();
-
-    public async Task InitializeAsync() => await _container.StartAsync();
-    public async Task DisposeAsync() => await _container.StopAsync();
-
-    private string ConnectionStringFor(string dbName)
-        => $"{_container.GetConnectionString()};Initial Catalog={dbName};";
+    private static string ConnectionStringFor(string dbName)
+        => MsSqlContainerFixture.GetConnectionString(dbName);
 
     [Fact]
     public async Task Should_mark_IsDeleted_and_DeletedAt_on_soft_delete()

@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AuditLog.EntityFrameworkCore.SoftDelete\AuditLog.EntityFrameworkCore.SoftDelete.csproj" />
+    <ProjectReference Include="..\AuditLog.TestContainers.Shared\AuditLog.TestContainers.Shared.csproj" />
   </ItemGroup>
 
 </Project>

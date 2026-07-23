@@ -1,34 +1,16 @@
 using AuditLog.Abstractions;
 using AuditLog.EntityFrameworkCore;
 using AuditLog.Generated;
+using AuditLog.TestContainers.Shared;
 using Microsoft.EntityFrameworkCore;
-using Testcontainers.MsSql;
 using Xunit;
 
 namespace AuditLog.IntegrationTests;
 
-public sealed class AuditLogIntegrationTests : IAsyncLifetime
+public sealed class AuditLogIntegrationTests
 {
-    private readonly MsSqlContainer _container = new MsSqlBuilder()
-        .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
-        .Build();
-
-    public async Task InitializeAsync()
-    {
-        await _container.StartAsync();
-    }
-
-    public async Task DisposeAsync()
-    {
-        await _container.StopAsync();
-    }
-
-    private DbContextOptions<TestDbContext> CreateOptions(string? dbName = null)
-    {
-        return new DbContextOptionsBuilder<TestDbContext>()
-            .UseSqlServer(_container.GetConnectionString())
-            .Options;
-    }
+    private static string ConnectionStringFor(string dbName)
+        => MsSqlContainerFixture.GetConnectionString(dbName);
 
     [Fact]
     public async Task Should_audit_Paciente_insert_in_SQL_Server()
@@ -43,7 +25,7 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
                 CorrelationId: "test-corr-001"));
 
         var options = new DbContextOptionsBuilder<TestDbContext>()
-            .UseSqlServer(_container.GetConnectionString())
+            .UseSqlServer(ConnectionStringFor(nameof(Should_audit_Paciente_insert_in_SQL_Server)))
             .AddInterceptors(interceptor)
             .Options;
 
@@ -97,7 +79,7 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
                 CorrelationId: "test-corr-002"));
 
         var options = new DbContextOptionsBuilder<TestDbContext>()
-            .UseSqlServer(_container.GetConnectionString())
+            .UseSqlServer(ConnectionStringFor(nameof(Should_audit_Paciente_update_in_SQL_Server)))
             .AddInterceptors(interceptor)
             .Options;
 
@@ -151,7 +133,7 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
                 CorrelationId: "test-corr-003"));
 
         var options = new DbContextOptionsBuilder<TestDbContext>()
-            .UseSqlServer(_container.GetConnectionString())
+            .UseSqlServer(ConnectionStringFor(nameof(Should_generate_CamposAlteradosJson_with_changed_fields)))
             .AddInterceptors(interceptor)
             .Options;
 
@@ -210,7 +192,7 @@ public sealed class AuditLogIntegrationTests : IAsyncLifetime
                 CorrelationId: "test-corr-004"));
 
         var options = new DbContextOptionsBuilder<TestDbContext>()
-            .UseSqlServer(_container.GetConnectionString())
+            .UseSqlServer(ConnectionStringFor(nameof(Should_audit_Paciente_delete_in_SQL_Server)))
             .AddInterceptors(interceptor)
             .Options;
 

@@ -11,6 +11,8 @@
     <Project Path="tests/AuditLog.IntegrationTests/AuditLog.IntegrationTests.csproj" />
     <Project Path="tests/AuditLog.SoftDelete.Generator.Tests/AuditLog.SoftDelete.Generator.Tests.csproj" />
     <Project Path="tests/AuditLog.SoftDelete.Reflection.Tests/AuditLog.SoftDelete.Reflection.Tests.csproj" />
+    <Project Path="tests/AuditLog.SoftDelete.Tests/AuditLog.SoftDelete.Tests.csproj" />
+    <Project Path="tests/AuditLog.TestContainers.Shared/AuditLog.TestContainers.Shared.csproj" />
     <Project Path="tests/AuditLog.Tests/AuditLog.Tests.csproj" />
   </Folder>
   <Folder Name="/samples/">
