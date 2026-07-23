@@ -1,21 +1,14 @@
 using AuditLog.EntityFrameworkCore.SoftDelete;
+using AuditLog.TestContainers.Shared;
 using Microsoft.EntityFrameworkCore;
-using Testcontainers.MsSql;
 using Xunit;
 
 namespace AuditLog.SoftDelete.Generator.Tests;
 
-public sealed class SoftDeleteGeneratedTests : IAsyncLifetime
+public sealed class SoftDeleteGeneratedTests
 {
-    private readonly MsSqlContainer _container = new MsSqlBuilder()
-        .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
-        .Build();
-
-    public async Task InitializeAsync() => await _container.StartAsync();
-    public async Task DisposeAsync() => await _container.StopAsync();
-
-    private string ConnectionStringFor(string dbName)
-        => $"{_container.GetConnectionString()};Initial Catalog={dbName};";
+    private static string ConnectionStringFor(string dbName)
+        => MsSqlContainerFixture.GetConnectionString(dbName);
 
     private SoftDeleteInterceptor InterceptorWithGeneratedHandlers()
     {
@@ -271,12 +264,16 @@ public sealed class SoftDeleteGeneratedTests : IAsyncLifetime
         await using var db = new GeneratedTestDbContext(options);
         await db.Database.EnsureCreatedAsync();
 
+        var pacienteId = Guid.NewGuid();
+        db.Set<Paciente>().Add(new Paciente { Id = pacienteId, Nome = "Inherited", Endereco = new PacienteEndereco { Logradouro = "Rua", Cidade = "Cidade" } });
+        await db.SaveChangesAsync();
+
         var protocoloId = Guid.NewGuid();
         var protocolo = new Protocolo
         {
             Id = protocoloId,
             Numero = "PROT-001",
-            PacienteId = Guid.NewGuid()
+            PacienteId = pacienteId
         };
         db.Set<Protocolo>().Add(protocolo); await db.SaveChangesAsync();
         db.Set<Protocolo>().Remove(protocolo); await db.SaveChangesAsync();
