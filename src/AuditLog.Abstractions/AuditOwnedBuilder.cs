@@ -3,7 +3,7 @@ using System.Linq.Expressions;
 namespace AuditLog.Abstractions;
 
 public sealed class AuditOwnedBuilder<TEntity, TOwned>
-    where TOwned : class
+    where TOwned : class?
 {
     public AuditOwnedBuilder<TEntity, TOwned> Key()
     {

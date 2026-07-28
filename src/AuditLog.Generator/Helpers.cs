@@ -115,8 +115,13 @@ internal static class Helpers
 
             if (prop.NavigationPrefix is not null)
             {
-                sb.AppendLine($"            if (entry.Reference(x => x.{prop.NavigationPrefix}).TargetEntry?.Property(x => x.{prop.PropertyName}).IsModified == true)");
-                sb.AppendLine($"                changed.Add({changedName});");
+                sb.AppendLine($"            {{");
+                sb.AppendLine($"                var refEntry_{prop.PropertyName} = entry.Reference(x => x.{prop.NavigationPrefix}).TargetEntry;");
+                sb.AppendLine($"                if (refEntry_{prop.PropertyName} is not null &&");
+                sb.AppendLine($"                    (refEntry_{prop.PropertyName}.State == EntityState.Added ||");
+                sb.AppendLine($"                     refEntry_{prop.PropertyName}.Property(\"{prop.PropertyName}\").IsModified))");
+                sb.AppendLine($"                    changed.Add({changedName});");
+                sb.AppendLine($"            }}");
             }
             else
             {

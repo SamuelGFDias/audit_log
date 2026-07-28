@@ -20,12 +20,23 @@ public sealed class AuditLogGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(configurators, static (ctx, configs) => GenerateAll(ctx, configs));
     }
 
+    private static readonly DiagnosticDescriptor ParseErrorDescriptor = new(
+        id: "ALG001",
+        title: "AuditLog configuration parse error",
+        messageFormat: "{0}",
+        category: "AuditLog.Generator",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
     private static void GenerateAll(SourceProductionContext context, ImmutableArray<ConfiguratorInfo> configurators)
     {
         if (configurators.Length == 0) return;
 
         foreach (var config in configurators)
         {
+            foreach (var error in config.ParseErrors)
+                context.ReportDiagnostic(Diagnostic.Create(ParseErrorDescriptor, Location.None, error));
+
             RootEntityGenerator.GenerateAuditLogClass(context, config);
             RootEntityGenerator.GenerateEntityMapClass(context, config);
             RootEntityGenerator.GenerateDescriptorClass(context, config);

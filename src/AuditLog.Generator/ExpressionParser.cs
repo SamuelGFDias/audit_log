@@ -15,7 +15,8 @@ internal static class ExpressionParser
         List<PropertyConfig> entityProperties,
         List<CollectionConfig> collectionConfigs,
         ITypeSymbol entityType,
-        string entityName)
+        string entityName,
+        System.Action<string>? onError = null)
     {
         var innermost = FindInnermostInvocation(expression);
         if (innermost is null) return;
@@ -26,7 +27,7 @@ internal static class ExpressionParser
         else if (methodName == "ForEach")
             ParseForEachChain(innermost, expression, entityType, entityName, collectionConfigs);
         else if (methodName == "ForOwned")
-            ParseForOwnedChain(innermost, expression, entityType, entityProperties);
+            ParseForOwnedChain(innermost, expression, entityType, entityProperties, onError);
     }
 
     private static InvocationExpressionSyntax? FindInnermostInvocation(ExpressionSyntax expression)
@@ -132,10 +133,14 @@ internal static class ExpressionParser
         InvocationExpressionSyntax forOwnedCall,
         ExpressionSyntax fullExpression,
         ITypeSymbol entityType,
-        List<PropertyConfig> configs)
+        List<PropertyConfig> configs,
+        System.Action<string>? onError = null)
     {
         if (forOwnedCall.ArgumentList.Arguments.Count < 2)
+        {
+            onError?.Invoke("ForOwned requires exactly 2 arguments: a navigation lambda and a configuration lambda.");
             return;
+        }
 
         var navArg = forOwnedCall.ArgumentList.Arguments[0].Expression;
         var configArg = forOwnedCall.ArgumentList.Arguments[1].Expression;
@@ -146,16 +151,28 @@ internal static class ExpressionParser
         else if (navArg is ParenthesizedLambdaExpressionSyntax pl)
             navBody = pl.Body as ExpressionSyntax;
 
+        if (navBody is PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } suppress)
+            navBody = suppress.Operand;
+
         if (navBody is not MemberAccessExpressionSyntax navMa)
+        {
+            onError?.Invoke("ForOwned first argument must be a lambda selecting a navigation property (e.g., x => x.PropertyName or x => x.PropertyName!).");
             return;
+        }
 
         var navigation = navMa.Name.Identifier.Text;
 
         if (configArg is not LambdaExpressionSyntax configLambda)
+        {
+            onError?.Invoke($"ForOwned second argument must be a lambda configuring the owned type '{navigation}'.");
             return;
+        }
 
         if (configLambda.Body is not BlockSyntax block)
+        {
+            onError?.Invoke($"ForOwned configuration lambda for '{navigation}' must have a block body (e.g., o => {{ ... }}).");
             return;
+        }
 
         foreach (var stmt in block.Statements)
         {
@@ -265,6 +282,9 @@ internal static class ExpressionParser
             body = sl.Body as ExpressionSyntax;
         else if (arg is ParenthesizedLambdaExpressionSyntax pl)
             body = pl.Body as ExpressionSyntax;
+
+        if (body is PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression } suppress)
+            body = suppress.Operand;
 
         if (body is MemberAccessExpressionSyntax ma)
             return ma.Name.Identifier.Text;

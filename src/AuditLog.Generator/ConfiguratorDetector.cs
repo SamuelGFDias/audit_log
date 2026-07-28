@@ -42,6 +42,7 @@ internal static class ConfiguratorDetector
 
         var entityProperties = new List<PropertyConfig>();
         var collectionConfigs = new List<CollectionConfig>();
+        var parseErrors = new List<string>();
 
         var constructor = classDecl.Members
             .OfType<ConstructorDeclarationSyntax>()
@@ -54,7 +55,8 @@ internal static class ConfiguratorDetector
                 if (statement is ExpressionStatementSyntax exprStmt)
                 {
                     ExpressionParser.ParseStatementExpression(
-                        exprStmt.Expression, entityProperties, collectionConfigs, entityType, entityName);
+                        exprStmt.Expression, entityProperties, collectionConfigs, entityType, entityName,
+                        onError: msg => parseErrors.Add(msg));
                 }
             }
         }
@@ -87,7 +89,8 @@ internal static class ConfiguratorDetector
             auditLogName,
             pkType.fullName, pkType.simpleName,
             [..entityProperties],
-            [..collectionConfigs]);
+            [..collectionConfigs],
+            [..parseErrors]);
     }
 
     private static bool IsSimpleScalarType(ITypeSymbol type)

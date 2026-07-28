@@ -69,13 +69,15 @@ internal sealed class ConfiguratorInfo
     public string EntityKeyTypeName { get; }
     public ImmutableArray<PropertyConfig> Properties { get; }
     public ImmutableArray<CollectionConfig> Collections { get; }
+    public ImmutableArray<string> ParseErrors { get; }
 
     public ConfiguratorInfo(
         string entityNamespace, string configuratorNamespace,
         string configuratorName, string entityName,
         string auditLogName, string entityKeyType, string entityKeyTypeName,
         ImmutableArray<PropertyConfig> properties,
-        ImmutableArray<CollectionConfig> collections)
+        ImmutableArray<CollectionConfig> collections,
+        ImmutableArray<string> parseErrors = default)
     {
         EntityNamespace = entityNamespace;
         ConfiguratorNamespace = configuratorNamespace;
@@ -86,5 +88,6 @@ internal sealed class ConfiguratorInfo
         EntityKeyTypeName = entityKeyTypeName;
         Properties = properties;
         Collections = collections;
+        ParseErrors = parseErrors.IsDefaultOrEmpty ? ImmutableArray<string>.Empty : parseErrors;
     }
 }

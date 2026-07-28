@@ -13,7 +13,7 @@ public abstract class AuditConfigurator<TEntity>
 
     protected AuditOwnedBuilder<TEntity, TOwned> ForOwned<TOwned>(
         Expression<Func<TEntity, TOwned>> expression)
-        where TOwned : class
+        where TOwned : class?
     {
         return default!;
     }
@@ -21,7 +21,7 @@ public abstract class AuditConfigurator<TEntity>
     protected void ForOwned<TOwned>(
         Expression<Func<TEntity, TOwned>> expression,
         Action<AuditOwnedBuilder<TEntity, TOwned>> configure)
-        where TOwned : class
+        where TOwned : class?
     {
     }
 
