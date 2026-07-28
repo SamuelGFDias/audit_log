@@ -45,7 +45,10 @@ public sealed class AuditSaveInterceptor : SaveChangesInterceptor
 
         foreach (var entry in context.ChangeTracker.Entries().ToList())
         {
-            if (entry.State is EntityState.Detached or EntityState.Unchanged)
+            if (entry.State == EntityState.Detached)
+                continue;
+
+            if (entry.State == EntityState.Unchanged && !HasChangedOwnedReference(entry))
                 continue;
 
             var entityType = entry.Entity.GetType();
@@ -91,5 +94,15 @@ public sealed class AuditSaveInterceptor : SaveChangesInterceptor
             .MakeGenericMethod(entityType);
 
         return entryMethod.Invoke(context, [entry.Entity])!;
+    }
+
+    private static bool HasChangedOwnedReference(EntityEntry entry)
+    {
+        foreach (var reference in entry.References)
+        {
+            if (reference.TargetEntry is { State: EntityState.Added or EntityState.Modified or EntityState.Deleted })
+                return true;
+        }
+        return false;
     }
 }
