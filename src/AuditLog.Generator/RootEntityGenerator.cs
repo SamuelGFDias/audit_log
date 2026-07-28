@@ -132,7 +132,7 @@ internal static class RootEntityGenerator
         sb.AppendLine("            var operacao = entry.State switch");
         sb.AppendLine("            {");
         sb.AppendLine("                EntityState.Added => AuditLog.Abstractions.AuditOperation.Added,");
-        sb.AppendLine("                EntityState.Modified => AuditLog.Abstractions.AuditOperation.Modified,");
+        sb.AppendLine("                EntityState.Modified or EntityState.Unchanged => AuditLog.Abstractions.AuditOperation.Modified,");
         sb.AppendLine("                EntityState.Deleted => AuditLog.Abstractions.AuditOperation.Deleted,");
         sb.AppendLine("                _ => throw new InvalidOperationException($\"Unexpected entity state: {entry.State}\")");
         sb.AppendLine("            };");

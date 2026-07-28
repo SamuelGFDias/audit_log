@@ -121,6 +121,70 @@ public sealed class AuditLogIntegrationTests
     }
 
     [Fact]
+    public async Task Should_audit_Paciente_when_only_owned_type_changes()
+    {
+        var registry = new AuditRegistry();
+        registry.AddGeneratedAuditConfigurations();
+
+        var interceptor = new AuditSaveInterceptor(registry, () =>
+            new AuditExecutionContext(
+                DateTimeOffset.UtcNow,
+                UsuarioId: "integration-test-user",
+                CorrelationId: "test-corr-owned-only"));
+
+        var options = new DbContextOptionsBuilder<TestDbContext>()
+            .UseSqlServer(ConnectionStringFor(nameof(Should_audit_Paciente_when_only_owned_type_changes)))
+            .AddInterceptors(interceptor)
+            .Options;
+
+        await using var db = new TestDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var paciente = new Paciente
+        {
+            Id = Guid.NewGuid(),
+            Nome = "Carlos Endereco",
+            Cpf = "55566677788",
+            CartaoSus = "SUS555666",
+            DataNascimento = new DateOnly(1978, 3, 10),
+            DataAtualizacao = DateTime.UtcNow,
+            Endereco = new Endereco
+            {
+                Logradouro = "Rua Antiga",
+                Cidade = "Cidade Antiga",
+                Cep = "22222222"
+            }
+        };
+
+        db.Set<Paciente>().Add(paciente);
+        await db.SaveChangesAsync();
+
+        // Substitui só o owned type (nenhuma outra propriedade escalar da raiz muda) — a entrada
+        // Paciente permanece EntityState.Unchanged; regressão da 0.4.10 fazia o CreateLog gerado
+        // lançar InvalidOperationException("Unexpected entity state: Unchanged") nesse cenário.
+        paciente.Endereco = new Endereco
+        {
+            Logradouro = "Rua Nova",
+            Cidade = "Cidade Nova",
+            Cep = "33333333"
+        };
+
+        var exception = await Record.ExceptionAsync(() => db.SaveChangesAsync());
+        Assert.Null(exception);
+
+        var logs = await db.Set<PacienteAuditLog>()
+            .AsNoTracking()
+            .Where(x => x.PacienteId == paciente.Id)
+            .OrderBy(x => x.OcorridoEm)
+            .ToListAsync();
+
+        Assert.Equal(2, logs.Count);
+        Assert.Equal(AuditOperation.Added, logs[0].Operacao);
+        Assert.Equal(AuditOperation.Modified, logs[1].Operacao);
+        Assert.Equal("Rua Nova", logs[1].EnderecoLogradouro);
+    }
+
+    [Fact]
     public async Task Should_generate_CamposAlteradosJson_with_changed_fields()
     {
         var registry = new AuditRegistry();
