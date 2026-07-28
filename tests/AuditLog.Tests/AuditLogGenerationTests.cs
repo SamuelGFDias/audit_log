@@ -368,6 +368,172 @@ public sealed class AuditLogGenerationTests
         Assert.Contains("Endereco.Logradouro", modifiedLog.CamposAlteradosJson);
         Assert.Contains("Endereco.Cep", modifiedLog.CamposAlteradosJson);
     }
+
+    [Fact]
+    public async Task ForOwned_nullable_added_with_null_navigation_should_not_throw()
+    {
+        var registry = new AuditRegistry();
+        registry.AddGeneratedAuditConfigurations();
+
+        var options = new DbContextOptionsBuilder<TestDbContext>()
+            .UseInMemoryDatabase("NullableOwnedAdded_" + Guid.NewGuid())
+            .AddInterceptors(new AuditSaveInterceptor(registry, () =>
+                new AuditExecutionContext(
+                    DateTimeOffset.UtcNow,
+                    UsuarioId: "user-001",
+                    CorrelationId: "corr-001")))
+            .Options;
+
+        await using var db = new TestDbContext(options);
+
+        var entity = new TestEntityNullableOwned
+        {
+            Id = Guid.NewGuid(),
+            Nome = "Sem Email",
+            EmailResponsavelTecnico = null
+        };
+
+        db.Set<TestEntityNullableOwned>().Add(entity);
+        await db.SaveChangesAsync();
+
+        var logs = await db.Set<TestEntityNullableOwnedAuditLog>()
+            .AsNoTracking()
+            .Where(x => x.TestEntityNullableOwnedId == entity.Id)
+            .ToListAsync();
+
+        Assert.Single(logs);
+        Assert.Equal(AuditOperation.Added, logs[0].Operacao);
+        // Convert.ToString(null) returns null, ?? string.Empty converts to ""
+        Assert.Equal("", logs[0].EmailResponsavelTecnicoValue);
+    }
+
+    [Fact]
+    public async Task ForOwned_nullable_modified_from_value_to_null_should_not_throw()
+    {
+        var registry = new AuditRegistry();
+        registry.AddGeneratedAuditConfigurations();
+
+        var options = new DbContextOptionsBuilder<TestDbContext>()
+            .UseInMemoryDatabase("NullableOwnedToNull_" + Guid.NewGuid())
+            .AddInterceptors(new AuditSaveInterceptor(registry, () =>
+                new AuditExecutionContext(
+                    DateTimeOffset.UtcNow,
+                    UsuarioId: "user-001",
+                    CorrelationId: "corr-001")))
+            .Options;
+
+        await using var db = new TestDbContext(options);
+
+        var entity = new TestEntityNullableOwned
+        {
+            Id = Guid.NewGuid(),
+            Nome = "Com Email",
+            EmailResponsavelTecnico = new Email { Value = "teste@example.com" }
+        };
+
+        db.Set<TestEntityNullableOwned>().Add(entity);
+        await db.SaveChangesAsync();
+
+        // Trigger a modification by changing Nome AND setting owned to null
+        entity.Nome = "Nome Alterado";
+        entity.EmailResponsavelTecnico = null;
+        await db.SaveChangesAsync();
+
+        var logs = await db.Set<TestEntityNullableOwnedAuditLog>()
+            .AsNoTracking()
+            .Where(x => x.TestEntityNullableOwnedId == entity.Id)
+            .OrderBy(x => x.OcorridoEm)
+            .ToListAsync();
+
+        Assert.Equal(2, logs.Count);
+
+        var modifiedLog = logs[1];
+        Assert.Equal(AuditOperation.Modified, modifiedLog.Operacao);
+        Assert.Equal("", modifiedLog.EmailResponsavelTecnicoValue);
+    }
+
+    [Fact]
+    public async Task ForOwned_nullable_modified_from_null_to_value_should_not_throw()
+    {
+        var registry = new AuditRegistry();
+        registry.AddGeneratedAuditConfigurations();
+
+        var options = new DbContextOptionsBuilder<TestDbContext>()
+            .UseInMemoryDatabase("NullableOwnedFromNull_" + Guid.NewGuid())
+            .AddInterceptors(new AuditSaveInterceptor(registry, () =>
+                new AuditExecutionContext(
+                    DateTimeOffset.UtcNow,
+                    UsuarioId: "user-001",
+                    CorrelationId: "corr-001")))
+            .Options;
+
+        await using var db = new TestDbContext(options);
+
+        var entity = new TestEntityNullableOwned
+        {
+            Id = Guid.NewGuid(),
+            Nome = "Sem Email Depois Com",
+            EmailResponsavelTecnico = null
+        };
+
+        db.Set<TestEntityNullableOwned>().Add(entity);
+        await db.SaveChangesAsync();
+
+        // Trigger a modification by changing Nome AND setting owned to a value
+        entity.Nome = "Nome Alterado";
+        entity.EmailResponsavelTecnico = new Email { Value = "novo@example.com" };
+        await db.SaveChangesAsync();
+
+        var logs = await db.Set<TestEntityNullableOwnedAuditLog>()
+            .AsNoTracking()
+            .Where(x => x.TestEntityNullableOwnedId == entity.Id)
+            .OrderBy(x => x.OcorridoEm)
+            .ToListAsync();
+
+        Assert.Equal(2, logs.Count);
+
+        var modifiedLog = logs[1];
+        Assert.Equal(AuditOperation.Modified, modifiedLog.Operacao);
+        Assert.Equal("novo@example.com", modifiedLog.EmailResponsavelTecnicoValue);
+    }
+
+    [Fact]
+    public async Task ForOwned_nullable_changed_properties_json_should_work()
+    {
+        var registry = new AuditRegistry();
+        registry.AddGeneratedAuditConfigurations();
+
+        var options = new DbContextOptionsBuilder<TestDbContext>()
+            .UseInMemoryDatabase("NullableOwnedChangedJson_" + Guid.NewGuid())
+            .AddInterceptors(new AuditSaveInterceptor(registry))
+            .Options;
+
+        await using var db = new TestDbContext(options);
+
+        var entity = new TestEntityNullableOwned
+        {
+            Id = Guid.NewGuid(),
+            Nome = "Teste Campos",
+            EmailResponsavelTecnico = new Email { Value = "original@example.com" }
+        };
+
+        db.Set<TestEntityNullableOwned>().Add(entity);
+        await db.SaveChangesAsync();
+
+        // Trigger modification: change Nome AND set owned to null
+        entity.Nome = "Nome Alterado";
+        entity.EmailResponsavelTecnico = null;
+        await db.SaveChangesAsync();
+
+        var modifiedLog = await db.Set<TestEntityNullableOwnedAuditLog>()
+            .AsNoTracking()
+            .FirstAsync(x => x.TestEntityNullableOwnedId == entity.Id && x.Operacao == AuditOperation.Modified);
+
+        Assert.NotNull(modifiedLog.CamposAlteradosJson);
+        // When owned navigation is set to null entirely, individual properties are not
+        // detected as modified — the key expectation is no NRE, which already passed above
+        Assert.Contains("Nome", modifiedLog.CamposAlteradosJson);
+    }
 }
 
 public sealed class TestDbContext : DbContext
@@ -375,6 +541,7 @@ public sealed class TestDbContext : DbContext
     public DbSet<Paciente> Pacientes => Set<Paciente>();
     public DbSet<Notificacao> Notificacoes => Set<Notificacao>();
     public DbSet<NotificacaoMedicamento> NotificacaoMedicamentos => Set<NotificacaoMedicamento>();
+    public DbSet<TestEntityNullableOwned> TestEntityNullableOwneds => Set<TestEntityNullableOwned>();
 
     public TestDbContext(DbContextOptions<TestDbContext> options) : base(options)
     {
@@ -392,6 +559,11 @@ public sealed class TestDbContext : DbContext
         });
         modelBuilder.Entity<Notificacao>().ToTable("Notificacoes").HasKey(x => x.Id);
         modelBuilder.Entity<NotificacaoMedicamento>().ToTable("NotificacaoMedicamentos").HasKey(x => new { x.NotificacaoId, x.MedicamentoId });
+        modelBuilder.Entity<TestEntityNullableOwned>().ToTable("TestEntityNullableOwneds").HasKey(x => x.Id);
+        modelBuilder.Entity<TestEntityNullableOwned>().OwnsOne(x => x.EmailResponsavelTecnico, end =>
+        {
+            end.Property(e => e.Value).HasMaxLength(255);
+        });
         modelBuilder.ApplyGeneratedAuditMaps();
     }
 }

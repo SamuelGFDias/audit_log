@@ -39,3 +39,15 @@ public sealed class NotificacaoMedicamento
     public bool MedicamentoUsoContinuo { get; set; }
     public string OrigemMedicamento { get; set; } = null!;
 }
+
+public sealed class Email
+{
+    public string Value { get; set; } = null!;
+}
+
+public sealed class TestEntityNullableOwned
+{
+    public Guid Id { get; set; }
+    public string Nome { get; set; } = null!;
+    public Email? EmailResponsavelTecnico { get; set; }
+}

@@ -77,7 +77,7 @@ internal static class Helpers
 
             var valueExpr = prop.NavigationPrefix is null
                 ? $"entity.{prop.PropertyName}"
-                : $"entity.{prop.NavigationPrefix}.{prop.PropertyName}";
+                : $"entity.{prop.NavigationPrefix}?.{prop.PropertyName}";
 
             if (prop.IsSensitive)
                 sb.AppendLine($"{indent}{prop.FullPropertyName} = \"***\",");
